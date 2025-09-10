@@ -32,27 +32,19 @@ function initialize() {
 
 // --- AUTHENTICATION FLOW ---
 async function handleAuthStateChanged(firebaseUser) {
-    if (firebaseUser) {
-        user = firebaseUser;
-        // Fetch user role from Firestore
-        const userDoc = await db.collection('users').doc(user.uid).get();
-        if (userDoc.exists) {
-            userRole = userDoc.data().role;
+    try {
+        if (firebaseUser) {
+            user = firebaseUser;
+            const userDoc = await db.collection('users').doc(user.uid).get();
+            userRole = userDoc.exists ? userDoc.data().role : null;
         } else {
-            // If user doc doesn't exist, create it
-            await db.collection('users').doc(user.uid).set({
-                uid: user.uid,
-                displayName: user.displayName || "",
-                phoneNumber: user.phoneNumber || "",
-                role: null
-            });
+            user = null;
             userRole = null;
         }
-    } else {
-        user = null;
-        userRole = null;
+        render();
+    } catch (err) {
+        showNotification('Auth error: ' + err.message, 'error');
     }
-    render();
     loadingOverlay.classList.remove('visible');
 }
 
@@ -369,3 +361,8 @@ function showNotification(message, type = 'success') { const banner = document.g
 
 // --- START THE APP ---
 document.addEventListener('DOMContentLoaded', initialize);
+
+window.addEventListener('error', function(e) {
+    showNotification('JS Error: ' + e.message, 'error');
+    loadingOverlay.classList.remove('visible');
+});
