@@ -89,15 +89,75 @@ function renderHeader() {
 }
 
 function renderLoginScreen() {
-    mainContent.innerHTML = `<div class="auth-container card"><h2 class="auth-title">Welcome</h2><p class="auth-subtitle">Sign in to connect with local farmers and shops.</p><form id="phone-auth-form" class="auth-form"><div class="phone-input-group"><select class="form-input" id="country-code"><option value="+91">+91</option></select><input type="tel" id="phone-input" class="form-input" placeholder="Enter phone number" required pattern="[0-9]{10}" maxlength="10" /></div><button type="submit" class="btn btn-primary">Send OTP</button></form><div id="recaptcha-container"></div><div class="divider">or</div><button id="google-signin-btn" class="btn btn-secondary"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.2v2.7h5.3c-.2 1.9-1.6 3.7-3.6 3.7-2.8 0-5-2.2-5-5s2.2-5 5-5c1.3 0 2.2.5 2.7 1l2-2c-1.2-1.2-2.8-2-4.7-2-4.1 0-7.5 3.4-7.5 7.5s3.4 7.5 7.5 7.5c4.5 0 7.2-3.1 7.2-7.3 0-.5 0-.9-.1-1.3z"/></svg>Sign in with Google</button></div>`;
-    document.getElementById('phone-auth-form').addEventListener('submit', handlePhoneSignIn);
-    document.getElementById('google-signin-btn').addEventListener('click', handleGoogleSignIn);
+    mainContent.innerHTML = `
+    <div class="auth-container card">
+        <h2 class="auth-title">Kisaan Connect</h2>
+        <div class="auth-tabs">
+            <button id="tab-signin" class="auth-tab active">Sign In</button>
+            <button id="tab-register" class="auth-tab">Register</button>
+        </div>
+        <form id="signin-form" class="auth-form">
+            <input type="email" id="signin-email" class="form-input" placeholder="Email" required />
+            <input type="password" id="signin-password" class="form-input" placeholder="Password" required />
+            <button type="submit" class="btn btn-primary">Sign In</button>
+        </form>
+        <form id="register-form" class="auth-form" style="display:none;">
+            <input type="text" id="register-name" class="form-input" placeholder="Full Name" required />
+            <input type="email" id="register-email" class="form-input" placeholder="Email" required />
+            <input type="password" id="register-password" class="form-input" placeholder="Password" required />
+            <input type="tel" id="register-phone" class="form-input" placeholder="Phone Number" pattern="[0-9]{10}" maxlength="10" required />
+            <button type="submit" class="btn btn-primary">Register</button>
+        </form>
+    </div>
+    `;
 
-    // Only render reCAPTCHA if not already rendered
-    if (!window.recaptchaVerifier) {
-        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'normal' });
-        window.recaptchaVerifier.render();
+    // Tab switching
+    document.getElementById('tab-signin').onclick = () => {
+        document.getElementById('signin-form').style.display = '';
+        document.getElementById('register-form').style.display = 'none';
+        document.getElementById('tab-signin').classList.add('active');
+        document.getElementById('tab-register').classList.remove('active');
+    };
+    document.getElementById('tab-register').onclick = () => {
+        document.getElementById('signin-form').style.display = 'none';
+        document.getElementById('register-form').style.display = '';
+        document.getElementById('tab-signin').classList.remove('active');
+        document.getElementById('tab-register').classList.add('active');
+    };
+
+    document.getElementById('signin-form').addEventListener('submit', handleEmailSignIn);
+    document.getElementById('register-form').addEventListener('submit', handleEmailRegister);
+}
+
+function handleEmailSignIn(e) {
+    e.preventDefault();
+    const email = document.getElementById('signin-email').value.trim();
+    const password = document.getElementById('signin-password').value;
+    auth.signInWithEmailAndPassword(email, password)
+        .catch(err => showNotification(err.message, "error"));
+}
+
+function handleEmailRegister(e) {
+    e.preventDefault();
+    const name = document.getElementById('register-name').value.trim();
+    const email = document.getElementById('register-email').value.trim();
+    const password = document.getElementById('register-password').value;
+    const phone = document.getElementById('register-phone').value.trim();
+    if (!/^[0-9]{10}$/.test(phone)) {
+        showNotification("Enter a valid 10-digit phone number.", "error");
+        return;
     }
+    auth.createUserWithEmailAndPassword(email, password)
+        .then(async cred => {
+            await db.collection('users').doc(cred.user.uid).set({
+                uid: cred.user.uid,
+                displayName: name,
+                phoneNumber: phone,
+                role: null
+            });
+            await cred.user.updateProfile({ displayName: name });
+        })
+        .catch(err => showNotification(err.message, "error"));
 }
 
 function renderOtpScreen(phoneNumber) {
@@ -256,9 +316,26 @@ async function startChatWith(sellerId) {
 
 // --- CHAT LOGIC ---
 function renderChatView() {
-    mainContent.innerHTML = `<div class="chat-container"><div class="chat-header"><button class="chat-back-btn" id="chat-back-btn">←</button><div class="chat-header-info"><h3>${currentChatPartner.displayName}</h3><p>${currentChatPartner.phoneNumber || 'Chatting about produce'}</p></div></div><div class="chat-messages"></div><form class="chat-input-form" id="chat-input-form"><input type="text" id="chat-input" class="chat-input" placeholder="Type a message..." autocomplete="off"><button type="submit" class="send-btn">➤</button></div>`;
+    mainContent.innerHTML = `
+    <div class="chat-container">
+        <div class="chat-header">
+            <button class="chat-back-btn" id="chat-back-btn">←</button>
+            <img src="https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentChatPartner.displayName || 'User')}" class="chat-avatar" alt="avatar" />
+            <div class="chat-header-info">
+                <h3>${currentChatPartner.displayName}</h3>
+                <p>
+                    <a href="tel:${currentChatPartner.phoneNumber}" class="chat-call-link">📞 ${currentChatPartner.phoneNumber}</a>
+                </p>
+            </div>
+        </div>
+        <div class="chat-messages"></div>
+        <form class="chat-input-form" id="chat-input-form">
+            <input type="text" id="chat-input" class="chat-input" placeholder="Type a message..." autocomplete="off">
+            <button type="submit" class="send-btn">➤</button>
+        </form>
+    </div>
+    `;
     document.getElementById('chat-back-btn').onclick = () => { if (unsubscribeChat) unsubscribeChat(); currentChatPartner = null; render(); };
-    
     const chatId = [user.uid, currentChatPartner.uid].sort().join('_');
     const chatRef = db.collection('chats').doc(chatId).collection('messages').orderBy('timestamp', 'asc');
     
@@ -287,7 +364,7 @@ function renderMessage(msg, container) {
 }
 
 // --- UTILITIES ---
-function getCurrentLocation() { return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 })); }
+function getCurrentLocation() { return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout:7000, maximumAge:0 })); }
 function showNotification(message, type = 'success') { const banner = document.getElementById('notification-banner'); banner.querySelector('p').textContent = message; banner.style.backgroundColor = type === 'success' ? 'var(--green-primary)' : 'var(--red-error)'; banner.classList.add('show'); setTimeout(() => banner.classList.remove('show'), 3500); }
 
 // --- START THE APP ---
