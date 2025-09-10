@@ -71,7 +71,7 @@ function render() {
 }
 
 function renderHeader() {
-    const logoHtml = `<div class="logo"><svg width="40" height="40" viewBox="0 0 24 24"><path d="M17.5 17.5C15.8 19.2 13.7 21 12 21s-3.8-1.8-5.5-3.5C4.8 15.8 3 13.7 3 12s1.8-3.8 3.5-5.5C8.2 4.8 10.3 3 12 3s3.8-1.8 5.5 3.5C19.2 8.2 21 10.3 21 12s-1.8-3.8-3.5 5.5zM12 15a3 3 0 100-6 3 3 0 000 6z" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg><h1>Kisaan Connect</h1></div>`;
+    const logoHtml = `<div class="logo"><svg width="40" height="40" viewBox="0 0 24 24"><path d="M17.5 17.5C15.8 19.2 13.7 21 12 21s-3.8-1.8-5.5-3.5C4.8 15.8 3 13.7 3 12s1.8-3.8 3.5-5.5C8.2 4.8 10.3 3 12 3s3.8 1.8 5.5 3.5C19.2 8.2 21 10.3 21 12s-1.8-3.8-3.5 5.5zM12 15a3 3 0 100-6 3 3 0 000 6z" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg><h1>Kisaan Connect</h1></div>`;
     let controlsHtml = '';
     if (user) {
         controlsHtml = `<button id="sign-out-btn" class="btn btn-outline">Sign Out</button>`;
@@ -225,7 +225,6 @@ function listenForPosts() {
                 const marker = L.marker([post.location.lat, post.location.lng], { icon }).addTo(map);
                 const popupContent = `<div class="popup-content"><h3 class="popup-title">${post.productName}</h3><div class="popup-details"><p><strong>Quantity:</strong> ${post.quantity} kg</p><p><strong>Price:</strong> ₹${post.price}/kg</p></div>${userRole === 'shop-owner' && post.sellerId !== user.uid ? `<button class="btn btn-primary" id="msg-btn-${post.id}" style="width:100%">Message Farmer</button>`: ''}</div>`;
                 marker.bindPopup(popupContent);
-
                 marker.on('popupopen', () => {
                     if (userRole === 'shop-owner' && post.sellerId !== user.uid) {
                         document.getElementById(`msg-btn-${post.id}`).addEventListener('click', () => startChatWith(post.sellerId));
@@ -292,14 +291,12 @@ function renderChatView() {
     document.getElementById('chat-back-btn').onclick = () => { if (unsubscribeChat) unsubscribeChat(); currentChatPartner = null; render(); };
     const chatId = [user.uid, currentChatPartner.uid].sort().join('_');
     const chatRef = db.collection('chats').doc(chatId).collection('messages').orderBy('timestamp', 'asc');
-    
     unsubscribeChat = chatRef.onSnapshot(snapshot => {
         const messagesContainer = document.querySelector('.chat-messages');
         messagesContainer.innerHTML = '';
         snapshot.forEach(doc => renderMessage(doc.data(), messagesContainer));
-        messagesContainer.scrollTop = 0; // Scroll to bottom (since it's reversed)
+        messagesContainer.scrollTop = 0;
     });
-
     document.getElementById('chat-input-form').addEventListener('submit', e => {
         e.preventDefault();
         const input = document.getElementById('chat-input');
