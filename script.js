@@ -43,9 +43,12 @@ const closeEditPostModal = document.getElementById('close-edit-post-modal');
 const chatModal = document.getElementById('chat-modal');
 const chatCloseBtn = document.getElementById('chat-close-btn');
 const chatCallBtn = document.getElementById('chat-call-btn');
+const chatWhatsappBtn = document.getElementById('chat-whatsapp-btn');
 const chatSendBtn = document.getElementById('chat-send-btn');
 const chatInput = document.getElementById('chat-input');
 const chatMessages = document.getElementById('chat-messages');
+const getLocationBtn = document.getElementById('get-location-btn');
+const locationStatus = document.getElementById('post-location-status');
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
@@ -124,12 +127,16 @@ function setupEventListeners() {
     if (e.key === 'Enter') sendChatMessage();
   });
 
-  chatCallBtn.addEventListener('click', initiateCall);
+  chatCallBtn.addEventListener('click', initiateCallFromChat);
+  chatWhatsappBtn.addEventListener('click', openWhatsAppFromChat);
 
   // User dropdown actions
   document.getElementById('logout-btn').addEventListener('click', handleLogout);
   document.getElementById('my-posts-btn').addEventListener('click', showMyPosts);
   document.getElementById('profile-btn').addEventListener('click', showProfile);
+
+  // Location button
+  getLocationBtn.addEventListener('click', getLocationForPost);
 }
 
 // Handle user sign in
@@ -146,9 +153,6 @@ async function handleUserSignedIn(user) {
       
       // Update UI
       updateUIAfterLogin();
-      
-      // Get user location
-      await getUserLocation();
       
       // Load initial data based on user role
       if (userData.role === 'farmer') {
@@ -198,53 +202,33 @@ function updateUIAfterLogin() {
   renderHomePage();
 }
 
-// Get user location
-function getUserLocation() {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Geolocation is not supported by this browser'));
-      return;
+// Get location for post creation
+function getLocationForPost() {
+  locationStatus.innerHTML = '<i class="fas fa-sync fa-spin"></i> Getting your location...';
+  
+  if (!navigator.geolocation) {
+    locationStatus.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Geolocation is not supported by your browser';
+    return;
+  }
+  
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      userLocation = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      };
+      locationStatus.innerHTML = '<i class="fas fa-check-circle"></i> Location acquired successfully!';
+    },
+    (error) => {
+      console.error('Error getting location:', error);
+      locationStatus.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Unable to get your location. Please try again.';
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 300000
     }
-    
-    const locationStatus = document.getElementById('location-status');
-    locationStatus.textContent = 'Getting your location...';
-    
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        userLocation = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude
-        };
-        
-        // Update user location in Firestore
-        if (userData) {
-          db.collection('users').doc(userData.uid).update({
-            location: new firebase.firestore.GeoPoint(
-              userLocation.latitude,
-              userLocation.longitude
-            ),
-            lastSeen: firebase.firestore.FieldValue.serverTimestamp()
-          });
-        }
-        
-        locationStatus.textContent = 'Location acquired!';
-        resolve(userLocation);
-      },
-      (error) => {
-        console.error('Error getting location:', error);
-        locationStatus.textContent = 'Unable to get location. Using default location.';
-        
-        // Use default location (Delhi)
-        userLocation = {
-          latitude: 28.6139,
-          longitude: 77.2090
-        };
-        
-        resolve(userLocation);
-      },
-      { timeout: 10000 }
-    );
-  });
+  );
 }
 
 // Switch auth tab
@@ -298,19 +282,12 @@ async function handleAuthSubmit(e) {
       const userCredential = await auth.createUserWithEmailAndPassword(email, password);
       const user = userCredential.user;
       
-      // Get user location
-      await getUserLocation();
-      
       // Save user data to Firestore
       await db.collection('users').doc(user.uid).set({
         email: email,
         name: name,
         phone: phone,
         role: role,
-        location: new firebase.firestore.GeoPoint(
-          userLocation.latitude,
-          userLocation.longitude
-        ),
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         lastSeen: firebase.firestore.FieldValue.serverTimestamp()
       });
@@ -342,6 +319,13 @@ async function handleCreatePost(e) {
     const price = document.getElementById('price').value;
     const description = document.getElementById('description').value;
     const deadlineHours = parseInt(document.getElementById('deadline').value);
+    
+    // Check if location is available
+    if (!userLocation) {
+      showNotification('Please enable location to create a post', 'error');
+      setLoading(false);
+      return;
+    }
     
     // Calculate expiry date
     const now = new Date();
@@ -584,7 +568,7 @@ function renderPosts(posts, type) {
             <i class="fab fa-whatsapp"></i>
             WhatsApp
           </button>
-          <button class="action-btn" onclick="startChat('${post.userId}', '${post.userName}')">
+          <button class="action-btn" onclick="startChat('${post.userId}', '${post.userName}', '${post.userPhone}')">
             <i class="fas fa-comment"></i>
             Chat
           </button>
@@ -646,8 +630,30 @@ function openWhatsApp(phoneNumber) {
   window.open(`https://wa.me/91${cleanedPhone}`, '_blank');
 }
 
+// Initiate call from chat
+function initiateCallFromChat() {
+  if (!currentChatUser || !currentChatUser.phone) {
+    showNotification('Phone number not available', 'error');
+    return;
+  }
+  
+  window.open(`tel:${currentChatUser.phone}`, '_self');
+}
+
+// Open WhatsApp from chat
+function openWhatsAppFromChat() {
+  if (!currentChatUser || !currentChatUser.phone) {
+    showNotification('Phone number not available', 'error');
+    return;
+  }
+  
+  // Remove any non-digit characters from phone number
+  const cleanedPhone = currentChatUser.phone.replace(/\D/g, '');
+  window.open(`https://wa.me/91${cleanedPhone}`, '_blank');
+}
+
 // Start chat with a user
-function startChat(userId, userName) {
+function startChat(userId, userName, userPhone) {
   if (!userId || userId === userData.uid) {
     showNotification('Cannot chat with yourself', 'error');
     return;
@@ -655,7 +661,8 @@ function startChat(userId, userName) {
   
   currentChatUser = {
     id: userId,
-    name: userName
+    name: userName,
+    phone: userPhone
   };
   
   // Update chat modal
@@ -924,12 +931,58 @@ function showProfile() {
           <p>Member since: ${userData.createdAt ? userData.createdAt.toDate().toLocaleDateString() : 'Unknown'}</p>
         </div>
       </div>
+      <div class="profile-actions">
+        <button class="action-btn" onclick="getLocationForApp()">
+          <i class="fas fa-map-marker-alt"></i>
+          Update My Location
+        </button>
+      </div>
     </div>
   `;
   
   mainContent.innerHTML = '';
   mainContent.appendChild(profilePage);
   userDropdown.classList.add('hidden');
+}
+
+// Get location for the app
+function getLocationForApp() {
+  if (!navigator.geolocation) {
+    showNotification('Geolocation is not supported by your browser', 'error');
+    return;
+  }
+  
+  showNotification('Getting your location...', 'success');
+  
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      userLocation = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      };
+      showNotification('Location updated successfully!', 'success');
+      
+      // Update user location in Firestore
+      if (userData) {
+        db.collection('users').doc(userData.uid).update({
+          location: new firebase.firestore.GeoPoint(
+            userLocation.latitude,
+            userLocation.longitude
+          ),
+          lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
+    },
+    (error) => {
+      console.error('Error getting location:', error);
+      showNotification('Unable to get your location', 'error');
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 300000
+    }
+  );
 }
 
 // Navigate to different pages
@@ -1048,48 +1101,37 @@ function renderMapPage() {
   }
 }
 
-// Render chat page
-function renderChatPage() {
-  const chatPage = document.createElement('div');
-  chatPage.className = 'chat-page';
-  
-  chatPage.innerHTML = `
-    <div class="section-header">
-      <h2 class="section-title">Recent Chats</h2>
-    </div>
-    <div class="chat-list" id="chats-container">
-      <div class="text-center" style="padding: 2rem;">
-        <p>Loading chats...</p>
-      </div>
-    </div>
-  `;
-  
-  mainContent.innerHTML = '';
-  mainContent.appendChild(chatPage);
-  
-  // Load recent chats
-  loadRecentChats();
-}
-
-// Load recent chats
-function loadRecentChats() {
-  // This would typically query Firestore for recent chats
-  // For now, we'll show a placeholder
-  const chatsContainer = document.getElementById('chats-container');
-  
-  if (chatsContainer) {
-    chatsContainer.innerHTML = `
-      <div class="text-center" style="padding: 2rem;">
-        <p>Start a chat by clicking on the "Chat" button on any post.</p>
-      </div>
-    `;
+// Initialize map
+function initMap() {
+  if (!userLocation) {
+    // Try to get user location for map
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          userLocation = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          };
+          renderMapWithLocation();
+        },
+        (error) => {
+          // Use default location if unable to get user location
+          userLocation = { latitude: 28.6139, longitude: 77.2090 };
+          renderMapWithLocation();
+        }
+      );
+    } else {
+      // Use default location if geolocation is not supported
+      userLocation = { latitude: 28.6139, longitude: 77.2090 };
+      renderMapWithLocation();
+    }
+  } else {
+    renderMapWithLocation();
   }
 }
 
-// Initialize map
-function initMap() {
-  if (!userLocation) return;
-  
+// Render map with location
+function renderMapWithLocation() {
   // Remove existing map if any
   if (map) {
     map.remove();
@@ -1159,7 +1201,7 @@ function initMap() {
               <p>${post.quantity} ${post.unit} • ₹${post.price}/${post.unit}</p>
               <p>By: ${post.userName || 'Unknown'}</p>
               <p>Distance: ${distance.toFixed(1)} km</p>
-              <button onclick="startChat('${post.userId}', '${post.userName}')" style="margin-top: 10px; padding: 5px 10px; background: #2e7d32; color: white; border: none; border-radius: 4px; cursor: pointer;">
+              <button onclick="startChat('${post.userId}', '${post.userName}', '${post.userPhone}')" style="margin-top: 10px; padding: 5px 10px; background: #2e7d32; color: white; border: none; border-radius: 4px; cursor: pointer;">
                 Chat
               </button>
             `))
@@ -1172,6 +1214,44 @@ function initMap() {
   }).catch(error => {
     console.error('Error loading posts for map:', error);
   });
+}
+
+// Render chat page
+function renderChatPage() {
+  const chatPage = document.createElement('div');
+  chatPage.className = 'chat-page';
+  
+  chatPage.innerHTML = `
+    <div class="section-header">
+      <h2 class="section-title">Recent Chats</h2>
+    </div>
+    <div class="chat-list" id="chats-container">
+      <div class="text-center" style="padding: 2rem;">
+        <p>Start a chat by clicking on the "Chat" button on any post.</p>
+      </div>
+    </div>
+  `;
+  
+  mainContent.innerHTML = '';
+  mainContent.appendChild(chatPage);
+  
+  // Load recent chats
+  loadRecentChats();
+}
+
+// Load recent chats
+function loadRecentChats() {
+  // This would typically query Firestore for recent chats
+  // For now, we'll show a placeholder
+  const chatsContainer = document.getElementById('chats-container');
+  
+  if (chatsContainer) {
+    chatsContainer.innerHTML = `
+      <div class="text-center" style="padding: 2rem;">
+        <p>Start a chat by clicking on the "Chat" button on any post.</p>
+      </div>
+    `;
+  }
 }
 
 // Toggle user dropdown
