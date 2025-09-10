@@ -19,13 +19,11 @@ html, body {
   color: var(--text);
   min-height: 100vh;
 }
-
 #app {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
-
 header {
   background: linear-gradient(90deg,var(--primary),var(--primary-dark) 95%);
   color: #fff;
@@ -68,13 +66,12 @@ main#main-content {
   min-height: 60vh;
   display: flex;
   flex-direction: column;
-  gap: 1.7rem;
+  gap: 1.2rem;
   position: relative;
 }
 @media (min-width: 701px) {
   main#main-content { max-width: 800px; }
 }
-
 .card {
   background: var(--card);
   border-radius: var(--radius);
@@ -83,12 +80,10 @@ main#main-content {
   margin-bottom: 1.1rem;
   animation: fadeInUp 0.5s;
 }
-
 @keyframes fadeInUp {
   0% { opacity: 0; transform: translateY(32px);}
   100% { opacity: 1; transform: translateY(0);}
 }
-
 .feed-list {
   display: flex;
   flex-direction: column;
@@ -180,7 +175,6 @@ main#main-content {
 .fab:active { background: var(--primary-dark);}
 .fab:hover { background: var(--accent);}
 .mapboxgl-canvas { border-radius: 1.1rem; }
-
 .map-container {
   width: 100%;
   height: 320px;
@@ -191,7 +185,6 @@ main#main-content {
   background: #dff4e3;
   margin-top:2rem;
 }
-
 .map-radius {
   margin: 0.9em 0 0.5em 0;
   display: flex;
@@ -205,7 +198,6 @@ main#main-content {
   padding: 0.2em 1.1em;
   font-size: 1em;
 }
-
 button, .button {
   background: linear-gradient(90deg,var(--primary), var(--primary-dark));
   color: #fff;
@@ -223,17 +215,6 @@ button, .button {
 }
 button:active { background: var(--primary-dark); transform: scale(0.97);}
 button[disabled] { background: var(--muted); color: #fff; cursor: not-allowed; opacity: 0.7;}
-button .ripple {
-  position: absolute;
-  border-radius: 50%;
-  transform: scale(0);
-  animation: ripple-effect 0.6s linear;
-  background: rgba(255,255,255,0.45);
-}
-@keyframes ripple-effect {
-  to { transform: scale(2.7); opacity: 0;}
-}
-
 form {
   display: flex;
   flex-direction: column;
@@ -254,7 +235,6 @@ input:focus, select:focus, textarea:focus {
 }
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button { opacity: 0.5; }
-
 #notification-banner {
   position: fixed;
   top: 1.3rem;
@@ -271,14 +251,12 @@ input[type="number"]::-webkit-outer-spin-button { opacity: 0.5; }
   pointer-events: none;
   transition: opacity .34s, transform .34s;
   transform: translateY(-36px) scale(.97);
-  letter-spacing: 0.01em;
   background: #e8f9ee;
   color: var(--primary);
   border: 2px solid var(--primary);
 }
 #notification-banner.show { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1);}
 #notification-banner.error { background: #fff3f1; color: #e74c3c; border: 2px solid #ffb1a8;}
-
 .loader-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
