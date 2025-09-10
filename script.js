@@ -1,327 +1,339 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+
 const firebaseConfig = {
-    apiKey: "AIzaSyDnhwxpN_6VXNY2rkfKJuA5XFmSERSOFsM",
-    authDomain: "kisaan-connect-da56d.firebaseapp.com",
-    projectId: "kisaan-connect-da56d",
-    storageBucket: "kisaan-connect-da56d.appspot.com",
-    messagingSenderId: "401721766160",
-    appId: "1:401721766160:web:fe4ec1d3d2cc0f19f07595"
+  apiKey: "AIzaSyDnhwxpN_6VXNY2rkfKJuA5XFmSERSOFsM",
+  authDomain: "kisaan-connect-da56d.firebaseapp.com",
+  projectId: "kisaan-connect-da56d",
+  storageBucket: "kisaan-connect-da56d.firebasestorage.app",
+  messagingSenderId: "401721766160",
+  appId: "1:401721766160:web:29644ebd5bcc3116f07595",
+  measurementId: "G-9VQVCJYCWE"
 };
+const GEMINI_API_KEY = "AIzaSyCIzTRo8li7RHEkI6BrNcBPTCTMvsqiFZw";
+const MAPBOX_ACCESS_TOKEN = "pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NmNuczAwemYycXBndjN6bWZ3N3gifQ.FwM1h9gQ27Z6f1n3lA5yng"; // Use your own for production
 
-let db, auth, map;
-let user = null, userRole = null;
-let userLocation = null;
-let currentChatPartner = null;
-let unsubscribeChat = null;
-let markers = [];
+let db, state = {role: null, user: null, location: null, markers: [], map: null, chat: {open:false, to:null, room:null}};
+const app = document.getElementById('app');
 
-const mainContent = document.getElementById('main-content');
-const header = document.getElementById('app-header');
-const loadingOverlay = document.getElementById('loading-overlay');
+document.addEventListener('DOMContentLoaded', init);
 
-// --- INITIALIZATION ---
-function initialize() {
-    firebase.initializeApp(firebaseConfig);
-    auth = firebase.auth();
-    db = firebase.firestore();
-    auth.onAuthStateChanged(handleAuthStateChanged);
+async function init() {
+  initializeApp(firebaseConfig);
+  db = getFirestore();
+  render();
 }
 
-// --- AUTHENTICATION FLOW ---
-async function handleAuthStateChanged(firebaseUser) {
-    try {
-        if (firebaseUser) {
-            user = firebaseUser;
-            const userDoc = await db.collection('users').doc(user.uid).get();
-            if (userDoc.exists) {
-                userRole = userDoc.data().role;
-            } else {
-                await auth.signOut();
-                user = null;
-                userRole = null;
-            }
-        } else {
-            user = null;
-            userRole = null;
-        }
-        render();
-    } catch (err) {
-        showNotification('Auth error: ' + err.message, 'error');
-    }
-    loadingOverlay.classList.remove('visible');
-}
-
-// --- UI RENDERING ROUTER ---
 function render() {
-    mainContent.innerHTML = '';
-    header.innerHTML = '';
-    if (map) {
-        map.remove();
-        map = null;
-    }
-    renderHeader();
-    if (!user) {
-        renderLoginScreen();
-    } else if (!userRole) {
-        renderRoleSelection();
-    } else if (currentChatPartner) {
-        renderChatView();
-    } else {
-        renderMapView(userRole);
-    }
-}
-
-function renderHeader() {
-    const logoHtml = `<div class="logo"><svg width="40" height="40" viewBox="0 0 24 24"><path d="M17.5 17.5C15.8 19.2 13.7 21 12 21s-3.8-1.8-5.5-3.5C4.8 15.8 3 13.7 3 12s1.8-3.8 3.5-5.5C8.2 4.8 10.3 3 12 3s3.8 1.8 5.5 3.5C19.2 8.2 21 10.3 21 12s-1.8-3.8-3.5 5.5zM12 15a3 3 0 100-6 3 3 0 000 6z" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg><h1>Kisaan Connect</h1></div>`;
-    let controlsHtml = '';
-    if (user) {
-        controlsHtml = `<button id="sign-out-btn" class="btn btn-outline">Sign Out</button>`;
-    }
-    header.innerHTML = logoHtml + `<div id="user-view-controls">${controlsHtml}</div>`;
-    if (user) document.getElementById('sign-out-btn').onclick = () => auth.signOut();
-}
-
-function renderLoginScreen() {
-    mainContent.innerHTML = `
-    <div class="auth-container card">
-        <h2 class="auth-title">Kisaan Connect</h2>
-        <div class="auth-tabs">
-            <button id="tab-signin" class="auth-tab active">Sign In</button>
-            <button id="tab-register" class="auth-tab">Register</button>
-        </div>
-        <form id="signin-form" class="auth-form">
-            <input type="email" id="signin-email" class="form-input" placeholder="Email" required />
-            <input type="password" id="signin-password" class="form-input" placeholder="Password" required />
-            <button type="submit" class="btn btn-primary">Sign In</button>
-        </form>
-        <form id="register-form" class="auth-form" style="display:none;">
-            <input type="text" id="register-name" class="form-input" placeholder="Full Name" required />
-            <input type="email" id="register-email" class="form-input" placeholder="Email" required />
-            <input type="password" id="register-password" class="form-input" placeholder="Password" required />
-            <input type="tel" id="register-phone" class="form-input" placeholder="Phone Number" pattern="[0-9]{10}" maxlength="10" required />
-            <button type="submit" class="btn btn-primary">Register</button>
-        </form>
-    </div>
-    `;
-    document.getElementById('tab-signin').onclick = () => {
-        document.getElementById('signin-form').style.display = '';
-        document.getElementById('register-form').style.display = 'none';
-        document.getElementById('tab-signin').classList.add('active');
-        document.getElementById('tab-register').classList.remove('active');
-    };
-    document.getElementById('tab-register').onclick = () => {
-        document.getElementById('signin-form').style.display = 'none';
-        document.getElementById('register-form').style.display = '';
-        document.getElementById('tab-signin').classList.remove('active');
-        document.getElementById('tab-register').classList.add('active');
-    };
-    document.getElementById('signin-form').addEventListener('submit', handleEmailSignIn);
-    document.getElementById('register-form').addEventListener('submit', handleEmailRegister);
-}
-
-function handleEmailSignIn(e) {
-    e.preventDefault();
-    const email = document.getElementById('signin-email').value.trim();
-    const password = document.getElementById('signin-password').value;
-    auth.signInWithEmailAndPassword(email, password)
-        .catch(err => showNotification(err.message, "error"));
-}
-
-function handleEmailRegister(e) {
-    e.preventDefault();
-    const name = document.getElementById('register-name').value.trim();
-    const email = document.getElementById('register-email').value.trim();
-    const password = document.getElementById('register-password').value;
-    const phone = document.getElementById('register-phone').value.trim();
-    if (!/^[0-9]{10}$/.test(phone)) {
-        showNotification("Enter a valid 10-digit phone number.", "error");
-        return;
-    }
-    auth.createUserWithEmailAndPassword(email, password)
-        .then(async cred => {
-            await db.collection('users').doc(cred.user.uid).set({
-                uid: cred.user.uid,
-                displayName: name,
-                phoneNumber: phone,
-                role: null
-            });
-            await cred.user.updateProfile({ displayName: name });
-        })
-        .catch(err => showNotification(err.message, "error"));
+  app.innerHTML = `
+    <header>
+      <div class="header-content">
+        <span class="logo">
+          <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f33e.svg" class="logo-icon" alt="" />
+          Kisaan Connect
+        </span>
+        <span id="role-indicator">${state.role ? (state.role === 'farmer' ? 'Farmer' : 'Shop Owner') : ''}</span>
+      </div>
+    </header>
+    <main id="main-content"></main>
+  `;
+  if (!state.role) renderRoleSelection();
+  else if (state.role === 'farmer') renderFarmerUI();
+  else if (state.role === 'shop_owner') renderShopUI();
 }
 
 function renderRoleSelection() {
-    mainContent.innerHTML = `<div class="card" style="text-align:center;"><h2 class="form-title">One last step!</h2><p class="auth-subtitle">Are you a farmer looking to sell, or a shop owner looking to buy?</p><div style="display:flex; gap: 1rem; justify-content:center;"><button id="farmer-role-btn" class="btn btn-primary">I'm a Farmer 🧑‍🌾</button><button id="shop-owner-role-btn" class="btn btn-secondary">I'm a Shop Owner 🛒</button></div></div>`;
-    document.getElementById('farmer-role-btn').onclick = () => setUserRole('farmer');
-    document.getElementById('shop-owner-role-btn').onclick = () => setUserRole('shop-owner');
-}
-
-async function setUserRole(role) {
-    await db.collection('users').doc(user.uid).update({ role });
-    userRole = role;
-    render();
-}
-
-function renderMapView(role) {
-    let formHtml = '';
-    if (role === 'farmer') {
-        formHtml = `<div class="form-container"><h2 class="form-title">Post Your Produce</h2><form id="produce-form"><div class="form-group"><label for="productName">Product Name</label><input type="text" id="productName" class="form-input" required placeholder="e.g., Organic Tomatoes"></div><div class="form-group"><label for="quantity">Quantity (kg)</label><input type="number" id="quantity" class="form-input" required placeholder="e.g., 25"></div><div class="form-group"><label for="price">Price (per kg)</label><input type="number" id="price" class="form-input" required placeholder="e.g., 18"></div><button type="submit" id="submit-button" class="btn btn-primary" style="width: 100%;">Post to Marketplace</button></form></div>`;
-    }
-    mainContent.innerHTML = `<div class="view-grid">${formHtml}<div class="card" style="padding:0; overflow:hidden;"><div id="map" style="height:500px;min-height:300px;"></div></div></div>`;
-    initializeMapWithData();
-}
-
-async function initializeMapWithData() {
-    loadingOverlay.classList.add('visible');
-    try {
-        const position = await getCurrentLocation();
-        userLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
-    } catch (error) {
-        showNotification("Could not get location. Using a default.", "error");
-        userLocation = { lat: 28.6139, lng: 77.2090 };
-    } finally {
-        initializeMap(userLocation);
-        if (userRole === 'farmer') {
-            addSingleMarker(userLocation, '#1d4ed8', 'Your Location');
-            document.getElementById('produce-form').addEventListener('submit', handlePostSubmit);
-        } else {
-            addSingleMarker(userLocation, '#c2410c', 'Your Shop');
-        }
-        listenForPosts();
-        loadingOverlay.classList.remove('visible');
-    }
-}
-
-function initializeMap(center) {
-    map = L.map('map').setView([center.lat, center.lng], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-    }).addTo(map);
-}
-
-function addSingleMarker(position, color, title) {
-    const icon = L.divIcon({
-        html: `<div style="width:20px;height:20px;background:${color};border-radius:50%;border:3px solid white;box-shadow:var(--shadow-md);"></div>`,
-        className: '',
-        iconSize: [26, 26],
-        iconAnchor: [13, 13]
-    });
-    L.marker([position.lat, position.lng], { icon }).addTo(map).bindPopup(title);
-}
-
-function listenForPosts() {
-    db.collection('produce_posts').orderBy("createdAt", "desc").onSnapshot(snapshot => {
-        markers.forEach(marker => map.removeLayer(marker));
-        markers = [];
-        snapshot.forEach(doc => {
-            const post = { id: doc.id, ...doc.data() };
-            if (post.location?.lat) {
-                const icon = L.divIcon({
-                    html: `<div style="background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="40" height="40" fill="%2316a34a"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>'); width:40px;height:40px;"></div>`,
-                    className: '',
-                    iconSize: [40, 40],
-                    iconAnchor: [20, 40],
-                    popupAnchor: [0, -40]
-                });
-                const marker = L.marker([post.location.lat, post.location.lng], { icon }).addTo(map);
-                const popupContent = `<div class="popup-content"><h3 class="popup-title">${post.productName}</h3><div class="popup-details"><p><strong>Quantity:</strong> ${post.quantity} kg</p><p><strong>Price:</strong> ₹${post.price}/kg</p></div>${userRole === 'shop-owner' && post.sellerId !== user.uid ? `<button class="btn btn-primary" id="msg-btn-${post.id}" style="width:100%">Message Farmer</button>`: ''}</div>`;
-                marker.bindPopup(popupContent);
-                marker.on('popupopen', () => {
-                    if (userRole === 'shop-owner' && post.sellerId !== user.uid) {
-                        document.getElementById(`msg-btn-${post.id}`).addEventListener('click', () => startChatWith(post.sellerId));
-                    }
-                });
-                markers.push(marker);
-            }
-        });
-    });
-}
-
-async function handlePostSubmit(event) {
-    event.preventDefault();
-    const submitButton = document.getElementById('submit-button');
-    submitButton.disabled = true;
-    submitButton.textContent = "Posting...";
-    try {
-        await db.collection("produce_posts").add({
-            productName: event.target.productName.value,
-            quantity: parseInt(event.target.quantity.value),
-            price: parseFloat(event.target.price.value),
-            location: userLocation,
-            sellerId: user.uid,
-            sellerName: user.displayName,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        showNotification("Posted successfully!", "success");
-        event.target.reset();
-    } catch (error) {
-        showNotification("Error posting.", "error");
-    } finally {
-        submitButton.disabled = false;
-        submitButton.textContent = "Post to Marketplace";
-    }
-}
-
-// --- CHAT LOGIC ---
-async function startChatWith(sellerId) {
-    const sellerDoc = await db.collection('users').doc(sellerId).get();
-    currentChatPartner = sellerDoc.data();
-    render();
-}
-
-function renderChatView() {
-    mainContent.innerHTML = `
-    <div class="chat-container">
-        <div class="chat-header">
-            <button class="chat-back-btn" id="chat-back-btn">←</button>
-            <img src="https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentChatPartner.displayName || 'User')}" class="chat-avatar" alt="avatar" />
-            <div class="chat-header-info">
-                <h3>${currentChatPartner.displayName}</h3>
-                <p>
-                    <a href="tel:${currentChatPartner.phoneNumber}" class="chat-call-link">📞 ${currentChatPartner.phoneNumber}</a>
-                </p>
-            </div>
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <section class="card center">
+      <h2 style="margin-bottom:1.2em;">Who are you?</h2>
+      <div class="role-card" tabindex="1" id="select-farmer">
+        <div class="role-illustration">
+          <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f9d1-200d-1f33e.svg" alt="Farmer" width="60"/>
         </div>
-        <div class="chat-messages"></div>
-        <form class="chat-input-form" id="chat-input-form">
-            <input type="text" id="chat-input" class="chat-input" placeholder="Type a message..." autocomplete="off">
-            <button type="submit" class="send-btn">➤</button>
-        </form>
-    </div>
-    `;
-    document.getElementById('chat-back-btn').onclick = () => { if (unsubscribeChat) unsubscribeChat(); currentChatPartner = null; render(); };
-    const chatId = [user.uid, currentChatPartner.uid].sort().join('_');
-    const chatRef = db.collection('chats').doc(chatId).collection('messages').orderBy('timestamp', 'asc');
-    unsubscribeChat = chatRef.onSnapshot(snapshot => {
-        const messagesContainer = document.querySelector('.chat-messages');
-        messagesContainer.innerHTML = '';
-        snapshot.forEach(doc => renderMessage(doc.data(), messagesContainer));
-        messagesContainer.scrollTop = 0;
-    });
-    document.getElementById('chat-input-form').addEventListener('submit', e => {
-        e.preventDefault();
-        const input = document.getElementById('chat-input');
-        if (input.value.trim() === '') return;
-        db.collection('chats').doc(chatId).collection('messages').add({ text: input.value, senderId: user.uid, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
-        input.value = '';
-    });
+        <div class="role-info">
+          <div class="role-title">I'm a Farmer</div>
+          <div class="role-desc">Post your produce, get AI price help, connect with shops!</div>
+        </div>
+      </div>
+      <div class="role-card" tabindex="2" id="select-shop-owner">
+        <div class="role-illustration">
+          <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f3ea.svg" alt="Shop" width="60"/>
+        </div>
+        <div class="role-info">
+          <div class="role-title">I'm a Shop Owner</div>
+          <div class="role-desc">See nearby produce, post requirements, chat/call/WhatsApp farmers.</div>
+        </div>
+      </div>
+      <div style="margin-top:2em;" class="text-muted">
+        Bringing the local food chain closer, faster, fresher!
+      </div>
+    </section>
+  `;
+  main.querySelector('#select-farmer').onclick = async () => { state.role = 'farmer'; render(); };
+  main.querySelector('#select-shop-owner').onclick = async () => { state.role = 'shop_owner'; render(); };
 }
 
-function renderMessage(msg, container) {
-    const sentOrReceived = msg.senderId === user.uid ? 'sent' : 'received';
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `chat-message ${sentOrReceived}`;
-    messageDiv.innerHTML = `<div class="chat-bubble"><p class="message-text">${msg.text}</p><p class="message-time">${msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</p></div>`;
-    container.prepend(messageDiv);
+async function renderFarmerUI() {
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <section class="card">
+      <h2>Post Your Surplus Produce</h2>
+      <form id="produce-form" autocomplete="off">
+        <label for="produceType">Produce</label>
+        <input type="text" id="produceType" required maxlength="32" placeholder="e.g. Tomatoes" />
+        <label for="quantity">Quantity</label>
+        <input type="number" id="quantity" required min="1" max="99999" placeholder="e.g. 100"/>
+        <label for="unit">Unit</label>
+        <select id="unit" required>
+          <option value="kg">kg</option>
+          <option value="quintal">quintal</option>
+          <option value="box">box</option>
+          <option value="litre">litre</option>
+        </select>
+        <label for="price">Expected Price (₹)</label>
+        <input type="number" id="price" required min="1" max="100000" placeholder="e.g. 200"/>
+        <button id="ai-price-btn" type="button" style="margin-bottom:0.7em;">💡 Get AI Price Suggestion</button>
+        <label for="farmerName">Your Name</label>
+        <input type="text" id="farmerName" maxlength="30" placeholder="Optional"/>
+        <label for="phone">Your Mobile (for shop to call/WhatsApp):</label>
+        <input type="tel" id="phone" maxlength="14" placeholder="e.g. 9876543210" pattern="[0-9]+" />
+        <button id="submit-btn" type="submit">Post Produce</button>
+      </form>
+    </section>
+    <div class="map-container" id="map"></div>
+    <div class='text-muted center' style='margin-top:.5em'>Your location is used to show produce on the map for local shops.</div>
+  `;
+  setTimeout(() => initializeMapAndPosts(), 60);
+  setTimeout(bindFarmerForm, 100);
 }
 
-// --- UTILITIES ---
-function getCurrentLocation() { return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout:7000, maximumAge:0 })); }
-function showNotification(message, type = 'success') { const banner = document.getElementById('notification-banner'); banner.querySelector('p').textContent = message; banner.style.backgroundColor = type === 'success' ? 'var(--green-primary)' : 'var(--red-error)'; banner.classList.add('show'); setTimeout(() => banner.classList.remove('show'), 3500); }
+function bindFarmerForm() {
+  document.getElementById('produce-form').onsubmit = async event => {
+    event.preventDefault();
+    showLoader(true);
+    const produceType = event.target.produceType.value.trim();
+    const quantity = event.target.quantity.value.trim();
+    const unit = event.target.unit.value;
+    const price = event.target.price.value.trim();
+    const farmerName = event.target.farmerName.value.trim();
+    const phone = event.target.phone.value.trim();
+    try {
+      await addDoc(collection(db, 'produce_posts'), {
+        produceType, quantity, unit, price, farmerName: farmerName || undefined, phone: phone || undefined,
+        location: state.location, createdAt: serverTimestamp()
+      });
+      showNotification("Produce posted successfully!", "success");
+      event.target.reset();
+    } catch {
+      showNotification("Failed to post produce. Try again.", "error");
+    }
+    showLoader(false);
+  };
+  document.getElementById('ai-price-btn').onclick = async () => {
+    const produce = document.getElementById('produceType').value.trim();
+    if (!produce) return showNotification("Enter a produce name first.", "error");
+    showNotification("Fetching AI price...", "success");
+    const price = await getAIPriceSuggestion(produce);
+    document.getElementById('price').value = price || '';
+    showNotification(price ? "AI price filled!" : "AI price not found.", price ? "success" : "error");
+  };
+}
 
-// --- START THE APP ---
-document.addEventListener('DOMContentLoaded', initialize);
+async function renderShopUI() {
+  const main = document.getElementById('main-content');
+  main.innerHTML = `
+    <section class="card" style="margin-bottom:0;">
+      <h2>Post Your Shop's Requirement</h2>
+      <form id="shop-form" autocomplete="off">
+        <label for="reqType">Item/Product</label>
+        <input type="text" id="reqType" required maxlength="32" placeholder="e.g. Potatoes" />
+        <label for="reqQuantity">Quantity</label>
+        <input type="number" id="reqQuantity" required min="1" max="99999" placeholder="e.g. 300"/>
+        <label for="reqUnit">Unit</label>
+        <select id="reqUnit" required>
+          <option value="kg">kg</option>
+          <option value="quintal">quintal</option>
+          <option value="box">box</option>
+          <option value="litre">litre</option>
+        </select>
+        <label for="reqPrice">Price you offer (₹)</label>
+        <input type="number" id="reqPrice" required min="1" max="100000" placeholder="e.g. 20"/>
+        <label for="shopName">Your Shop Name</label>
+        <input type="text" id="shopName" maxlength="50" placeholder="Optional"/>
+        <label for="shopPhone">Your Mobile (for farmer to call/WhatsApp):</label>
+        <input type="tel" id="shopPhone" maxlength="14" placeholder="e.g. 9876543210" pattern="[0-9]+" />
+        <button id="shop-submit-btn" type="submit">Post Requirement</button>
+      </form>
+    </section>
+    <div class="map-container" id="map"></div>
+    <div class='text-muted center' style='margin-top:.5em'>Map: See farmers selling near your location!</div>
+  `;
+  setTimeout(() => initializeMapAndPosts(), 60);
+  setTimeout(bindShopForm, 100);
+}
 
-window.addEventListener('error', function(e) {
-    showNotification('JS Error: ' + e.message, 'error');
-    loadingOverlay.classList.remove('visible');
-});
+function bindShopForm() {
+  document.getElementById('shop-form').onsubmit = async event => {
+    event.preventDefault();
+    showLoader(true);
+    const produceType = event.target.reqType.value.trim();
+    const quantity = event.target.reqQuantity.value.trim();
+    const unit = event.target.reqUnit.value;
+    const price = event.target.reqPrice.value.trim();
+    const shopName = event.target.shopName.value.trim();
+    const phone = event.target.shopPhone.value.trim();
+    try {
+      await addDoc(collection(db, 'shop_requests'), {
+        produceType, quantity, unit, price, shopName: shopName || undefined, phone: phone || undefined,
+        location: state.location, createdAt: serverTimestamp()
+      });
+      showNotification("Requirement posted!", "success");
+      event.target.reset();
+    } catch {
+      showNotification("Failed to post. Try again.", "error");
+    }
+    showLoader(false);
+  };
+}
+
+async function initializeMapAndPosts() {
+  state.location = await getLocation();
+  if (state.map) { state.map.remove(); state.map = null; }
+  mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
+  state.map = new mapboxgl.Map({
+    container: "map",
+    style: "mapbox://styles/mapbox/streets-v11",
+    center: [state.location.lng, state.location.lat],
+    zoom: 13,
+  });
+  state.map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+  addMapUserMarker([state.location.lng, state.location.lat]);
+  listenAllPostsAndRender();
+}
+
+function addMapUserMarker([lng,lat]) {
+  const el = document.createElement('div');
+  el.className = 'produce-marker my-marker';
+  el.innerHTML = `<span class="icon">📍</span>`;
+  new mapboxgl.Marker(el).setLngLat([lng,lat])
+    .setPopup(new mapboxgl.Popup().setText("You are here"))
+    .addTo(state.map);
+}
+
+function listenAllPostsAndRender() {
+  // Clear old markers
+  state.markers.forEach(m => m.remove && m.remove());
+  state.markers = [];
+  // Farmers' produce
+  const q1 = query(collection(db, 'produce_posts'), orderBy("createdAt", "desc"));
+  onSnapshot(q1, snapshot => {
+    snapshot.forEach(doc => {
+      const post = doc.data();
+      if (!post.location) return;
+      const el = document.createElement('div');
+      el.className = 'produce-marker';
+      el.innerHTML = `<span class="icon">🥕</span>`;
+      const phone = post.phone || '';
+      const popupHTML = `
+        <div style="font-weight:700;font-size:1.09em">${post.produceType || ''}</div>
+        <div>Qty: <b>${post.quantity}</b> ${post.unit || ''}</div>
+        <div>Price: <b>₹${post.price}</b></div>
+        <div>Farmer: <span>${post.farmerName || 'Anonymous'}</span></div>
+        <div style="margin-top:.7em;">
+          ${phone ? `
+          <button class="button" onclick="window.open('tel:${phone}')">📞 Call</button>
+          <button class="button" onclick="window.open('https://wa.me/91${phone}')">💬 WhatsApp</button>
+          ` : ''}
+          <button class="button" onclick="startChat('${doc.id}','farmer')">💬 In-app Chat</button>
+        </div>
+      `;
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([post.location.lng, post.location.lat])
+        .setPopup(new mapboxgl.Popup({ offset: 24 }).setHTML(popupHTML))
+        .addTo(state.map);
+      state.markers.push(marker);
+    });
+  });
+  // Shop owners' requests (for farmers to see)
+  const q2 = query(collection(db, 'shop_requests'), orderBy("createdAt", "desc"));
+  onSnapshot(q2, snapshot => {
+    snapshot.forEach(doc => {
+      const req = doc.data();
+      if (!req.location) return;
+      const el = document.createElement('div');
+      el.className = 'produce-marker';
+      el.innerHTML = `<span class="icon">🏪</span>`;
+      const phone = req.phone || '';
+      const popupHTML = `
+        <div style="font-weight:700;font-size:1.09em">${req.produceType || ''} (Need)</div>
+        <div>Qty: <b>${req.quantity}</b> ${req.unit || ''}</div>
+        <div>Price: <b>₹${req.price}</b></div>
+        <div>Shop: <span>${req.shopName || 'Shop'}</span></div>
+        <div style="margin-top:.7em;">
+          ${phone ? `
+          <button class="button" onclick="window.open('tel:${phone}')">📞 Call</button>
+          <button class="button" onclick="window.open('https://wa.me/91${phone}')">💬 WhatsApp</button>
+          ` : ''}
+          <button class="button" onclick="startChat('${doc.id}','shop')">💬 In-app Chat</button>
+        </div>
+      `;
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat([req.location.lng, req.location.lat])
+        .setPopup(new mapboxgl.Popup({ offset: 24 }).setHTML(popupHTML))
+        .addTo(state.map);
+      state.markers.push(marker);
+    });
+  });
+}
+
+// --- CHAT (starter, extendable) ---
+window.startChat = (id, type) => {
+  // For demo: open a modal-like chat (real: use Firestore chat collections/queries)
+  showNotification("In-app chat coming soon! (Template ready)", "success");
+  // You can implement Firestore-based chat here, with real-time onSnapshot, etc.
+};
+
+// --- AI Price Suggestion via Gemini ---
+async function getAIPriceSuggestion(produce) {
+  try {
+    const prompt = `Give a single best estimate for the current market price (in INR) for 1 kg of "${produce}" in India. Only output the number (integer).`;
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      }
+    );
+    const data = await resp.json();
+    const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const price = (txt.match(/\d+/) || [])[0];
+    return price;
+  } catch {
+    return '';
+  }
+}
+
+// --- Geolocation for maps ---
+function getLocation() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve({ lat:28.6, lng:77.2 });
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve({ lat:28.6, lng:77.2 }),
+      { enableHighAccuracy:true, timeout:9000 }
+    );
+  });
+}
+
+// --- Notification / Loader ---
+function showNotification(message, type = "success") {
+  const el = document.getElementById('notification-banner');
+  el.textContent = message;
+  el.className = `show${type === "error" ? " error" : ""}`;
+  setTimeout(() => { el.className = ""; }, 3000);
+}
+function showLoader(show = true) {
+  document.getElementById('loader-overlay').classList.toggle('hidden', !show);
+}
