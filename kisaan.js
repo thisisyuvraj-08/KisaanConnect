@@ -1,8 +1,19 @@
+// --- Firebase Config ---
+const firebaseConfig = {
+    apiKey: "AIzaSyDnhwxpN_6VXNY2rkfKJuA5XFmSERSOFsM",
+    authDomain: "kisaan-connect-da56d.firebaseapp.com",
+    projectId: "kisaan-connect-da56d",
+    storageBucket: "kisaan-connect-da56d.appspot.com",
+    messagingSenderId: "401721766160",
+    appId: "1:401721766160:web:29644ebd5bcc3116f07595",
+    measurementId: "G-9VQVCJYCWE"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
 // All code runs after DOMContentLoaded for safe element access!
 document.addEventListener('DOMContentLoaded', function() {
-    // --- Firebase Setup ---
-    const db = firebase.firestore();
-
     // --- UI Elements ---
     const authModal = document.getElementById('authModal');
     const loginForm = document.getElementById('loginForm');
@@ -10,12 +21,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const showRegisterBtn = document.getElementById('showRegisterBtn');
     const showLoginBtn = document.getElementById('showLoginBtn');
     const showLoginLink = document.getElementById('showLoginLink');
-    const authTitle = document.getElementById('authTitle');
+    const authError = document.getElementById('authError');
     const roleModal = document.getElementById('roleModal');
-    const farmerBtn = document.getElementById('farmerBtn');
-    const kiranaBtn = document.getElementById('kiranaBtn');
     const farmerSection = document.getElementById('farmerSection');
     const kiranaSection = document.getElementById('kiranaSection');
+    const mapSection = document.getElementById('mapSection');
     const languageDropdown = document.getElementById('languageDropdown');
 
     // --- State ---
@@ -603,43 +613,100 @@ document.addEventListener('DOMContentLoaded', function() {
         showAuth();
     })();
 
-    firebase.auth().onAuthStateChanged(async function(user) {
+    // --- Auth State Listener ---
+    auth.onAuthStateChanged(async user => {
         if (user) {
-            document.getElementById('authModal').classList.add('hidden');
-            document.getElementById('roleModal').classList.add('hidden');
-            // Show main UI, load user data, etc.
-            // You can check user role here and show the right section
-            // Example:
-            // showFarmerSection() or showKiranaSection()
+            // Check if user has a role
+            const userDoc = await db.collection('users').doc(user.uid).get();
+            if (!userDoc.exists) {
+                // New user, show role modal
+                authModal.classList.add('hidden');
+                roleModal.classList.remove('hidden');
+                farmerSection.classList.add('hidden');
+                kiranaSection.classList.add('hidden');
+                mapSection.classList.add('hidden');
+            } else {
+                const role = userDoc.data().role;
+                authModal.classList.add('hidden');
+                roleModal.classList.add('hidden');
+                if (role === 'farmer') {
+                    farmerSection.classList.remove('hidden');
+                    kiranaSection.classList.add('hidden');
+                } else if (role === 'kirana') {
+                    kiranaSection.classList.remove('hidden');
+                    farmerSection.classList.add('hidden');
+                }
+                mapSection.classList.remove('hidden');
+            }
         } else {
-            document.getElementById('authModal').classList.remove('hidden');
-            document.getElementById('roleModal').classList.add('hidden');
-            // Hide main UI
+            // Not logged in
+            authModal.classList.remove('hidden');
+            roleModal.classList.add('hidden');
+            farmerSection.classList.add('hidden');
+            kiranaSection.classList.add('hidden');
+            mapSection.classList.add('hidden');
         }
     });
 
-    document.getElementById('loginForm').onsubmit = function(e) {
+    // --- Login/Register Logic ---
+    loginForm.onsubmit = function(e) {
         e.preventDefault();
+        authError.textContent = '';
         const email = document.getElementById('loginEmail').value.trim();
         const password = document.getElementById('loginPassword').value;
-        firebase.auth().signInWithEmailAndPassword(email, password)
-            .catch(err => alert(err.message));
+        auth.signInWithEmailAndPassword(email, password)
+            .catch(err => authError.textContent = err.message);
     };
 
-    document.getElementById('registerForm').onsubmit = async function(e) {
+    registerForm.onsubmit = async function(e) {
         e.preventDefault();
+        authError.textContent = '';
         const name = document.getElementById('registerName').value.trim();
         const email = document.getElementById('registerEmail').value.trim();
         const phone = document.getElementById('registerPhone').value.trim();
         const password = document.getElementById('registerPassword').value;
         try {
-            const cred = await firebase.auth().createUserWithEmailAndPassword(email, password);
-            await firebase.firestore().collection('users').doc(cred.user.uid).set({
+            const cred = await auth.createUserWithEmailAndPassword(email, password);
+            await db.collection('users').doc(cred.user.uid).set({
                 name, email, phone, role: null
             });
             await cred.user.updateProfile({ displayName: name });
         } catch (err) {
-            alert(err.message);
+            authError.textContent = err.message;
+        }
+    };
+
+    // --- Show/Hide Register/Login ---
+    showRegisterBtn.onclick = function() {
+        loginForm.classList.add('hidden');
+        registerForm.classList.remove('hidden');
+        showLoginLink.classList.remove('hidden');
+    };
+    showLoginBtn.onclick = function() {
+        loginForm.classList.remove('hidden');
+        registerForm.classList.add('hidden');
+        showLoginLink.classList.add('hidden');
+    };
+
+    // --- Role Selection ---
+    document.getElementById('farmerBtn').onclick = async function() {
+        const user = auth.currentUser;
+        if (user) {
+            await db.collection('users').doc(user.uid).update({ role: 'farmer' });
+            roleModal.classList.add('hidden');
+            farmerSection.classList.remove('hidden');
+            kiranaSection.classList.add('hidden');
+            mapSection.classList.remove('hidden');
+        }
+    };
+    document.getElementById('kiranaBtn').onclick = async function() {
+        const user = auth.currentUser;
+        if (user) {
+            await db.collection('users').doc(user.uid).update({ role: 'kirana' });
+            roleModal.classList.add('hidden');
+            kiranaSection.classList.remove('hidden');
+            farmerSection.classList.add('hidden');
+            mapSection.classList.remove('hidden');
         }
     };
 });
