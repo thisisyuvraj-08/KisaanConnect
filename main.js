@@ -8,289 +8,251 @@ const firebaseConfig = {
     appId: "1:401721766160:web:fe4ec1d3d2cc0f19f07595"
 };
 
-// ❗ IMPORTANT: PASTE YOUR MAPBOX TOKEN HERE
-const MAPBOX_ACCESS_TOKEN = 'YOUR_MAPBOX_ACCESS_TOKEN';
-
 // --- APPLICATION STATE ---
-let db, map;
+let db, auth, map;
+let user = null;
 let userRole = null;
 let userLocation = null;
+let currentChatPartner = null;
+let unsubscribeChat = null;
 let markers = [];
 
 // --- DOM ELEMENTS ---
 const mainContent = document.getElementById('main-content');
-const userViewControls = document.getElementById('user-view-controls');
+const header = document.getElementById('app-header');
 const loadingOverlay = document.getElementById('loading-overlay');
-const contactModal = document.getElementById('contact-modal');
 
 // --- INITIALIZATION ---
 function initialize() {
-    try {
-        firebase.initializeApp(firebaseConfig);
-        db = firebase.firestore();
-        console.log("Firebase Initialized.");
-        render();
-    } catch (error) {
-        console.error("Firebase initialization failed:", error);
-        showNotification("Critical Error: Could not connect to the database.", "error");
-    } finally {
-        // Hide initial loader once everything is ready
-        setTimeout(() => loadingOverlay.classList.remove('visible'), 500);
+    firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth();
+    db = firebase.firestore();
+    auth.onAuthStateChanged(handleAuthStateChanged);
+}
+
+// --- AUTHENTICATION FLOW ---
+async function handleAuthStateChanged(firebaseUser) {
+    if (firebaseUser) {
+        const userRef = db.collection('users').doc(firebaseUser.uid);
+        const doc = await userRef.get();
+        if (!doc.exists) {
+            await userRef.set({
+                displayName: firebaseUser.displayName || `User-${firebaseUser.uid.substring(0, 5)}`,
+                phoneNumber: firebaseUser.phoneNumber,
+                uid: firebaseUser.uid,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        const userData = (await userRef.get()).data();
+        user = userData;
+        userRole = userData.role || null;
+    } else {
+        user = null;
+        userRole = null;
+    }
+    render();
+    loadingOverlay.classList.remove('visible');
+}
+
+// --- UI RENDERING ROUTER ---
+function render() {
+    mainContent.innerHTML = '';
+    header.innerHTML = '';
+    if (map) { map.remove(); map = null; }
+
+    renderHeader();
+
+    if (!user) {
+        renderLoginScreen();
+    } else if (!userRole) {
+        renderRoleSelection();
+    } else if (currentChatPartner) {
+        renderChatView();
+    } else {
+        renderMapView(userRole);
     }
 }
 
-// --- UI RENDERING & CONTROL ---
-function render() {
-    mainContent.innerHTML = '';
-    userViewControls.innerHTML = '';
-    if (map) { map.remove(); map = null; }
-
-    if (!userRole) {
-        renderRoleSelection();
-    } else {
-        renderUserControls();
-        mainContent.style.opacity = 0; // For fade-in effect
-        if (userRole === 'farmer') {
-            renderFarmerView();
-        } else if (userRole === 'shop-owner') {
-            renderShopOwnerView();
-        }
-        initializeViewForRole(userRole);
-        setTimeout(() => mainContent.style.opacity = 1, 50); // Trigger fade-in
+function renderHeader() {
+    const logoHtml = `<div class="logo"><svg width="40" height="40" viewBox="0 0 24 24"><path d="M17.5 17.5C15.8 19.2 13.7 21 12 21s-3.8-1.8-5.5-3.5C4.8 15.8 3 13.7 3 12s1.8-3.8 3.5-5.5C8.2 4.8 10.3 3 12 3s3.8 1.8 5.5 3.5C19.2 8.2 21 10.3 21 12s-1.8 3.8-3.5 5.5zM12 15a3 3 0 100-6 3 3 0 000 6z" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg><h1>Kisaan Connect</h1></div>`;
+    let controlsHtml = '';
+    if (user) {
+        controlsHtml = `<button id="sign-out-btn" class="btn btn-outline">Sign Out</button>`;
     }
+    header.innerHTML = logoHtml + `<div id="user-view-controls">${controlsHtml}</div>`;
+    if (user) document.getElementById('sign-out-btn').onclick = () => auth.signOut();
+}
+
+function renderLoginScreen() {
+    mainContent.innerHTML = `<div class="auth-container card"><h2 class="auth-title">Welcome</h2><p class="auth-subtitle">Sign in to connect with local farmers and shops.</p><form id="phone-auth-form" class="auth-form"><div class="phone-input-group"><select class="form-input"><option>+91</option></select><input type="tel" id="phone-input" class="form-input" placeholder="Enter phone number" required /></div><button type="submit" class="btn btn-primary">Send OTP</button></form><div id="recaptcha-container"></div><div class="divider">or</div><button id="google-signin-btn" class="btn btn-secondary"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.2v2.7h5.3c-.2 1.9-1.6 3.7-3.6 3.7-2.8 0-5-2.2-5-5s2.2-5 5-5c1.3 0 2.2.5 2.7 1l2-2c-1.2-1.2-2.8-2-4.7-2-4.1 0-7.5 3.4-7.5 7.5s3.4 7.5 7.5 7.5c4.5 0 7.2-3.1 7.2-7.3 0-.5 0-.9-.1-1.3z"/></svg>Sign in with Google</button></div>`;
+    document.getElementById('phone-auth-form').addEventListener('submit', handlePhoneSignIn);
+    document.getElementById('google-signin-btn').addEventListener('click', handleGoogleSignIn);
+    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'normal' });
+    window.recaptchaVerifier.render();
+}
+
+function renderOtpScreen(phoneNumber) {
+    mainContent.innerHTML = `<div class="auth-container card"><h2 class="auth-title">Verify OTP</h2><p class="auth-subtitle">Enter the code sent to ${phoneNumber}</p><form id="otp-verify-form" class="auth-form"><input type="number" id="otp-input" class="form-input" placeholder="Enter 6-digit OTP" required /><button type="submit" class="btn btn-primary">Verify & Sign In</button></form></div>`;
+    document.getElementById('otp-verify-form').addEventListener('submit', handleOtpVerification);
 }
 
 function renderRoleSelection() {
-    mainContent.innerHTML = `
-        <div class="role-selection-view">
-            <h2 class="role-selection-title">Connecting Fields to Local Stores</h2>
-            <p class="role-selection-subtitle">The simplest way for farmers to sell surplus produce and for shop owners to source fresh, local goods.</p>
-            <div class="role-buttons">
-                <button class="btn btn-primary" id="farmer-role-btn">I'm a Farmer 🧑‍🌾</button>
-                <button class="btn btn-secondary" id="shop-owner-role-btn">I'm a Shop Owner 🛒</button>
-            </div>
-        </div>
-    `;
-    document.getElementById('farmer-role-btn').onclick = () => handleRoleSelect('farmer');
-    document.getElementById('shop-owner-role-btn').onclick = () => handleRoleSelect('shop-owner');
+    mainContent.innerHTML = `<div class="card" style="text-align:center;"><h2 class="form-title">One last step!</h2><p class="auth-subtitle">Are you a farmer looking to sell, or a shop owner looking to buy?</p><div style="display:flex; gap: 1rem; justify-content:center;"><button id="farmer-role-btn" class="btn btn-primary">I'm a Farmer 🧑‍🌾</button><button id="shop-owner-role-btn" class="btn btn-secondary">I'm a Shop Owner 🛒</button></div></div>`;
+    document.getElementById('farmer-role-btn').onclick = () => setUserRole('farmer');
+    document.getElementById('shop-owner-role-btn').onclick = () => setUserRole('shop-owner');
 }
 
-function renderUserControls() {
-    const switchButton = document.createElement('button');
-    switchButton.textContent = 'Switch Role';
-    switchButton.className = 'btn btn-outline';
-    switchButton.onclick = () => handleRoleSelect(null);
-    userViewControls.appendChild(switchButton);
+function renderMapView(role) {
+    let formHtml = '';
+    if (role === 'farmer') {
+        formHtml = `<div class="form-container"><h2 class="form-title">Post Your Produce</h2><form id="produce-form"><div class="form-group"><label for="productName">Product Name</label><input type="text" id="productName" class="form-input" required placeholder="e.g., Organic Tomatoes"></div><div class="form-group"><label for="quantity">Quantity (kg)</label><input type="number" id="quantity" class="form-input" required placeholder="e.g., 25"></div><div class="form-group"><label for="price">Price (per kg)</label><input type="number" id="price" class="form-input" required placeholder="e.g., 18"></div><button type="submit" id="submit-button" class="btn btn-primary" style="width: 100%;">Post to Marketplace</button></form></div>`;
+    }
+    mainContent.innerHTML = `<div class="view-grid">${formHtml}<div class="card" style="padding:0; overflow:hidden;"><div id="map"></div></div></div>`;
+    initializeMapWithData();
 }
 
-function renderFarmerView() {
-    mainContent.innerHTML = `
-        <div class="view-grid">
-            <div class="form-container">
-                <h2 class="form-title">Post Your Produce</h2>
-                <form id="produce-form">
-                    <div class="form-group">
-                        <label for="productName">Product Name</label>
-                        <input type="text" id="productName" name="productName" class="form-input" required placeholder="e.g., Organic Tomatoes">
-                    </div>
-                    <div class="form-group">
-                        <label for="quantity">Quantity (in kg)</label>
-                        <input type="number" id="quantity" name="quantity" class="form-input" required placeholder="e.g., 25">
-                    </div>
-                    <div class="form-group">
-                        <label for="price">Price (per kg)</label>
-                        <input type="number" id="price" name="price" class="form-input" required placeholder="e.g., 18">
-                    </div>
-                    <button type="submit" id="submit-button" class="btn btn-primary" style="width: 100%;">Post to Marketplace</button>
-                </form>
-            </div>
-            <div class="card">
-                <h2 class="card-title">Your Location</h2>
-                <div id="map"></div>
-                <p id="location-status" style="text-align:center; margin-top:1rem;"></p>
-            </div>
-        </div>
-    `;
-}
-
-function renderShopOwnerView() {
-    mainContent.innerHTML = `
-        <div class="card card-full-height">
-            <h2 class="card-title">Live Marketplace</h2>
-            <div id="map"></div>
-        </div>
-    `;
-}
 
 // --- CORE LOGIC & EVENT HANDLERS ---
-function handleRoleSelect(role) {
-    userRole = role;
-    render();
-}
+function handlePhoneSignIn(event) { event.preventDefault(); const phoneNumber = "+91" + document.getElementById('phone-input').value; auth.signInWithPhoneNumber(phoneNumber, window.recaptchaVerifier).then(c => { window.confirmationResult = c; showNotification("OTP sent!", "success"); renderOtpScreen(phoneNumber); }).catch(e => showNotification("Error: " + e.message, "error")); }
+function handleOtpVerification(event) { event.preventDefault(); const otp = document.getElementById('otp-input').value; window.confirmationResult.confirm(otp).catch(e => showNotification("Invalid OTP", "error")); }
+function handleGoogleSignIn() { auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e => showNotification("Google Sign-In failed.", "error")); }
+async function setUserRole(role) { await db.collection('users').doc(user.uid).update({ role }); userRole = role; render(); }
 
-async function initializeViewForRole(role) {
+async function initializeMapWithData() {
     loadingOverlay.classList.add('visible');
     try {
         const position = await getCurrentLocation();
         userLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
     } catch (error) {
-        console.error(error.message);
         showNotification("Could not get location. Using a default.", "error");
-        userLocation = { lat: 28.6139, lng: 77.2090 }; // Default to Delhi
+        userLocation = { lat: 28.6139, lng: 77.2090 };
     } finally {
-        initializeMap([userLocation.lng, userLocation.lat]);
-        if (role === 'farmer') setupFarmerView();
-        else if (role === 'shop-owner') setupShopOwnerView();
+        initializeMap(userLocation);
+        if (userRole === 'farmer') {
+            addSingleMarker(userLocation, '#1d4ed8', 'Your Location');
+            document.getElementById('produce-form').addEventListener('submit', handlePostSubmit);
+        } else {
+            addSingleMarker(userLocation, '#c2410c', 'Your Shop');
+        }
+        listenForPosts();
         loadingOverlay.classList.remove('visible');
     }
 }
 
-function setupFarmerView() {
-    document.getElementById('location-status').textContent = `📍 Your location is set.`;
-    addSingleMarker([userLocation.lng, userLocation.lat], '#1d4ed8', 'Your Location');
-    document.getElementById('produce-form').addEventListener('submit', handleFormSubmit);
-}
-
-function setupShopOwnerView() {
-    addSingleMarker([userLocation.lng, userLocation.lat], '#c2410c', 'Your Shop');
-    listenForPosts();
-}
-
-async function handleFormSubmit(event) {
+async function handlePostSubmit(event) {
     event.preventDefault();
     const submitButton = document.getElementById('submit-button');
-    if (!userLocation) return showNotification("Your location is required to post.", "error");
-
     submitButton.disabled = true;
     submitButton.textContent = "Posting...";
-
-    const postData = {
-        farmerName: "Anonymous Farmer", // Placeholder
-        phone: "0123456789", // Placeholder
-        productName: event.target.productName.value,
-        quantity: parseInt(event.target.quantity.value),
-        price: parseFloat(event.target.price.value),
-        location: userLocation,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
-
     try {
-        await db.collection("produce_posts").add(postData);
-        showNotification(`"${postData.productName}" posted successfully!`, "success");
+        await db.collection("produce_posts").add({
+            productName: event.target.productName.value,
+            quantity: parseInt(event.target.quantity.value),
+            price: parseFloat(event.target.price.value),
+            location: userLocation,
+            sellerId: user.uid,
+            sellerName: user.displayName,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        showNotification("Posted successfully!", "success");
         event.target.reset();
     } catch (error) {
-        console.error("Error adding document: ", error);
-        showNotification("Error posting produce. Please try again.", "error");
+        showNotification("Error posting.", "error");
     } finally {
         submitButton.disabled = false;
         submitButton.textContent = "Post to Marketplace";
     }
 }
 
-// --- FIREBASE & MAPBOX FUNCTIONS ---
-function listenForPosts() {
-    db.collection('produce_posts').orderBy("createdAt", "desc").onSnapshot((snapshot) => {
-        const posts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        renderMarkers(posts);
-    }, (error) => {
-        console.error("Error listening to posts:", error);
-    });
-}
-
+// --- LEAFLET.JS & FIREBASE DATA ---
 function initializeMap(center) {
-    if (MAPBOX_ACCESS_TOKEN === 'YOUR_MAPBOX_ACCESS_TOKEN') {
-        showNotification("Map is not configured.", 'error');
-        document.getElementById('map').innerHTML = `<div style="text-align:center; padding: 2rem;">Please add a Mapbox token in main.js</div>`;
-        return;
-    }
-    mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
-    map = new mapboxgl.Map({
-        container: 'map',
-        style: 'mapbox://styles/mapbox/streets-v12',
-        center: center,
-        zoom: 12
+    map = L.map('map').setView([center.lat, center.lng], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+}
+
+function addSingleMarker(position, color, title) {
+    const icon = L.divIcon({
+        html: `<div style="width:20px;height:20px;background:${color};border-radius:50%;border:3px solid white;box-shadow:var(--shadow-md);"></div>`,
+        className: '',
+        iconSize: [26, 26],
+        iconAnchor: [13, 13]
     });
-    map.addControl(new mapboxgl.NavigationControl());
+    L.marker([position.lat, position.lng], { icon }).addTo(map).bindPopup(title);
 }
 
-function addSingleMarker(coords, color, text) {
-    if (!map) return;
-    new mapboxgl.Marker({ color }).setLngLat(coords).setPopup(new mapboxgl.Popup().setText(text)).addTo(map);
-}
+function listenForPosts() {
+    db.collection('produce_posts').orderBy("createdAt", "desc").onSnapshot(snapshot => {
+        markers.forEach(marker => map.removeLayer(marker));
+        markers = [];
+        snapshot.forEach(doc => {
+            const post = { id: doc.id, ...doc.data() };
+            if (post.location?.lat) {
+                const icon = L.divIcon({
+                    html: `<div style="background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="40" height="40" fill="%2316a34a"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg>'); width:40px;height:40px;"></div>`,
+                    className: '',
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 40],
+                    popupAnchor: [0, -40]
+                });
+                const marker = L.marker([post.location.lat, post.location.lng], { icon }).addTo(map);
+                
+                const popupContent = `<div class="popup-content"><h3 class="popup-title">${post.productName}</h3><div class="popup-details"><p><strong>Quantity:</strong> ${post.quantity} kg</p><p><strong>Price:</strong> ₹${post.price}/kg</p></div>${userRole === 'shop-owner' && post.sellerId !== user.uid ? `<button class="btn btn-primary" id="msg-btn-${post.id}" style="width:100%">Message Farmer</button>`: ''}</div>`;
+                marker.bindPopup(popupContent);
 
-function renderMarkers(posts) {
-    if (!map) return;
-    markers.forEach(marker => marker.remove());
-    markers = [];
-
-    posts.forEach(post => {
-        if (!post.location?.lat) return;
-        const el = document.createElement('div');
-        el.className = 'produce-marker';
-
-        const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
-            <div class="popup-content">
-                <h3 class="popup-title">${post.productName}</h3>
-                <div class="popup-details">
-                    <p><strong>Quantity:</strong> ${post.quantity} kg</p>
-                    <p><strong>Price:</strong> ₹${post.price}/kg</p>
-                </div>
-                <button class="btn btn-secondary" style="width:100%" data-post-id="${post.id}">View Contact</button>
-            </div>
-        `);
-        
-        const newMarker = new mapboxgl.Marker(el)
-            .setLngLat([post.location.lng, post.location.lat])
-            .setPopup(popup)
-            .addTo(map);
-
-        // Add event listener to the "View Contact" button within the popup
-        popup.on('open', () => {
-            document.querySelector(`[data-post-id="${post.id}"]`).addEventListener('click', () => {
-                showContactModal(post);
-            });
+                marker.on('popupopen', () => {
+                    if (userRole === 'shop-owner' && post.sellerId !== user.uid) {
+                        document.getElementById(`msg-btn-${post.id}`).addEventListener('click', () => startChatWith(post.sellerId));
+                    }
+                });
+                markers.push(marker);
+            }
         });
-        
-        markers.push(newMarker);
     });
+}
+
+async function startChatWith(sellerId) {
+    const sellerDoc = await db.collection('users').doc(sellerId).get();
+    currentChatPartner = sellerDoc.data();
+    render();
+}
+
+// --- CHAT LOGIC ---
+function renderChatView() {
+    mainContent.innerHTML = `<div class="chat-container"><div class="chat-header"><button class="chat-back-btn" id="chat-back-btn">←</button><div class="chat-header-info"><h3>${currentChatPartner.displayName}</h3><p>${currentChatPartner.phoneNumber || 'Chatting about produce'}</p></div></div><div class="chat-messages"></div><form class="chat-input-form" id="chat-input-form"><input type="text" id="chat-input" class="chat-input" placeholder="Type a message..." autocomplete="off"><button type="submit" class="send-btn">➤</button></form></div>`;
+    document.getElementById('chat-back-btn').onclick = () => { if (unsubscribeChat) unsubscribeChat(); currentChatPartner = null; render(); };
+    
+    const chatId = [user.uid, currentChatPartner.uid].sort().join('_');
+    const chatRef = db.collection('chats').doc(chatId).collection('messages').orderBy('timestamp', 'asc');
+    
+    unsubscribeChat = chatRef.onSnapshot(snapshot => {
+        const messagesContainer = document.querySelector('.chat-messages');
+        messagesContainer.innerHTML = '';
+        snapshot.forEach(doc => renderMessage(doc.data(), messagesContainer));
+        messagesContainer.scrollTop = 0; // Scroll to bottom (since it's reversed)
+    });
+
+    document.getElementById('chat-input-form').addEventListener('submit', e => {
+        e.preventDefault();
+        const input = document.getElementById('chat-input');
+        if (input.value.trim() === '') return;
+        db.collection('chats').doc(chatId).collection('messages').add({ text: input.value, senderId: user.uid, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+        input.value = '';
+    });
+}
+
+function renderMessage(msg, container) {
+    const sentOrReceived = msg.senderId === user.uid ? 'sent' : 'received';
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chat-message ${sentOrReceived}`;
+    messageDiv.innerHTML = `<div class="chat-bubble"><p class="message-text">${msg.text}</p><p class="message-time">${msg.timestamp ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}</p></div>`;
+    container.prepend(messageDiv);
 }
 
 // --- UTILITIES ---
-function getCurrentLocation() {
-    return new Promise((resolve, reject) => {
-        if (!navigator.geolocation) return reject(new Error("Geolocation is not supported."));
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 7000,
-            maximumAge: 0
-        });
-    });
-}
-
-function showNotification(message, type = 'success') {
-    const banner = document.getElementById('notification-banner');
-    const messageEl = document.getElementById('notification-message');
-    messageEl.textContent = message;
-    banner.style.backgroundColor = type === 'success' ? 'var(--green-primary)' : 'var(--red-error)';
-    banner.classList.add('show');
-    setTimeout(() => banner.classList.remove('show'), 3500);
-}
-
-function showContactModal(post) {
-    const modalBody = document.getElementById('modal-body');
-    modalBody.innerHTML = `
-        <h2 class="modal-title">Contact Details</h2>
-        <p class="modal-detail"><span>Farmer:</span> ${post.farmerName}</p>
-        <p class="modal-detail"><span>Product:</span> ${post.productName}</p>
-        <p class="modal-detail"><span>Phone:</span> <a href="tel:${post.phone}" style="color:var(--blue-primary);">${post.phone}</a></p>
-    `;
-    contactModal.classList.add('visible');
-}
-
-document.getElementById('modal-close-btn').onclick = () => contactModal.classList.remove('visible');
-contactModal.onclick = (e) => {
-    if (e.target === contactModal) contactModal.classList.remove('visible');
-};
+function getCurrentLocation() { return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 })); }
+function showNotification(message, type = 'success') { const banner = document.getElementById('notification-banner'); banner.querySelector('p').textContent = message; banner.style.backgroundColor = type === 'success' ? 'var(--green-primary)' : 'var(--red-error)'; banner.classList.add('show'); setTimeout(() => banner.classList.remove('show'), 3500); }
 
 // --- START THE APP ---
 document.addEventListener('DOMContentLoaded', initialize);
