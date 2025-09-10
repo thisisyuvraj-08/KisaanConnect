@@ -94,6 +94,17 @@ document.addEventListener('DOMContentLoaded', function() {
         showRegisterBtn.style.display = '';
     });
 
+    document.getElementById('showRegisterBtn').onclick = function() {
+        document.getElementById('loginForm').classList.add('hidden');
+        document.getElementById('registerForm').classList.remove('hidden');
+        document.getElementById('showLoginLink').classList.remove('hidden');
+    };
+    document.getElementById('showLoginBtn').onclick = function() {
+        document.getElementById('loginForm').classList.remove('hidden');
+        document.getElementById('registerForm').classList.add('hidden');
+        document.getElementById('showLoginLink').classList.add('hidden');
+    };
+
     // --- Login ---
     loginForm && loginForm.addEventListener('submit', async function(e) {
         e.preventDefault();
@@ -591,4 +602,44 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         showAuth();
     })();
+
+    firebase.auth().onAuthStateChanged(async function(user) {
+        if (user) {
+            document.getElementById('authModal').classList.add('hidden');
+            document.getElementById('roleModal').classList.add('hidden');
+            // Show main UI, load user data, etc.
+            // You can check user role here and show the right section
+            // Example:
+            // showFarmerSection() or showKiranaSection()
+        } else {
+            document.getElementById('authModal').classList.remove('hidden');
+            document.getElementById('roleModal').classList.add('hidden');
+            // Hide main UI
+        }
+    });
+
+    document.getElementById('loginForm').onsubmit = function(e) {
+        e.preventDefault();
+        const email = document.getElementById('loginEmail').value.trim();
+        const password = document.getElementById('loginPassword').value;
+        firebase.auth().signInWithEmailAndPassword(email, password)
+            .catch(err => alert(err.message));
+    };
+
+    document.getElementById('registerForm').onsubmit = async function(e) {
+        e.preventDefault();
+        const name = document.getElementById('registerName').value.trim();
+        const email = document.getElementById('registerEmail').value.trim();
+        const phone = document.getElementById('registerPhone').value.trim();
+        const password = document.getElementById('registerPassword').value;
+        try {
+            const cred = await firebase.auth().createUserWithEmailAndPassword(email, password);
+            await firebase.firestore().collection('users').doc(cred.user.uid).set({
+                name, email, phone, role: null
+            });
+            await cred.user.updateProfile({ displayName: name });
+        } catch (err) {
+            alert(err.message);
+        }
+    };
 });
