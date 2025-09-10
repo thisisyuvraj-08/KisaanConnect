@@ -44,6 +44,27 @@ body {
 .divider:not(:empty)::after { margin-left: .5em; }
 #recaptcha-container { margin-top: 1rem; display: flex; justify-content: center; }
 
+.auth-tabs {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 2rem;
+    gap: 1rem;
+}
+.auth-tab {
+    background: var(--gray-bg);
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: 0.5rem 0.5rem 0 0;
+    font-weight: 600;
+    color: var(--gray-dark);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.auth-tab.active, .auth-tab:hover {
+    background: var(--green-light);
+    color: var(--green-dark);
+}
+
 /* --- BUTTONS --- */
 .btn { font-family: 'Poppins', sans-serif; font-weight: 600; padding: 0.75rem 1.75rem; border-radius: 0.5rem; border: none; cursor: pointer; transition: all 0.2s ease-in-out; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; text-align: center; font-size: 1rem; }
 .btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
@@ -80,6 +101,28 @@ body {
 .chat-input:focus { outline: none; box-shadow: 0 0 0 3px var(--green-light); }
 .send-btn { background: var(--green-primary); color: white; border: none; border-radius: 50%; width: 48px; height: 48px; font-size: 1.5rem; margin-left: 0.75rem; cursor: pointer; display: flex; justify-content: center; align-items: center; flex-shrink: 0; transition: transform 0.2s; }
 .send-btn:hover { transform: scale(1.1); }
+
+.chat-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-right: 1rem;
+    background: var(--gray-border);
+    object-fit: cover;
+}
+.chat-header-info {
+    display: flex;
+    flex-direction: column;
+}
+.chat-call-link {
+    color: var(--green-primary);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 1rem;
+}
+.chat-call-link:hover {
+    text-decoration: underline;
+}
 
 /* --- MAP & LOADING --- */
 #map { flex-grow: 1; border-radius: 0.75rem; width: 100%; min-height: 400px; background-color: var(--gray-border); }
