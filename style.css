@@ -140,3 +140,45 @@ body {
 /* --- NOTIFICATION BANNER --- */
 #notification-banner { position: fixed; top: 1.5rem; left: 50%; transform: translateX(-50%) translateY(-150%); color: var(--white); padding: 1rem 1.5rem; border-radius: 0.5rem; box-shadow: var(--shadow-lg); z-index: 3000; font-weight: 600; transition: transform 0.4s ease-in-out; }
 #notification-banner.show { transform: translateX(-50%) translateY(0); }
+#loading-overlay {
+    position: fixed;
+    z-index: 9999;
+    inset: 0;
+    background: rgba(255,255,255,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.3s;
+}
+#loading-overlay:not(.visible) { display: none; }
+.spinner {
+    width: 48px;
+    height: 48px;
+    border: 5px solid #e5e7eb;
+    border-top: 5px solid #16a34a;
+    border-radius: 50%;
+    animation: spinner 1s linear infinite;
+}
+@keyframes spinner { to { transform: rotate(360deg); } }
+#notification-banner {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 10000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 48px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+}
+#notification-banner.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+#notification-banner p {
+    color: #fff;
+    font-weight: 600;
+    margin: 0;
+    padding: 0.5rem 1.5rem;
+}
