@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kisaan Connect</title>
+    <link rel="stylesheet" href="kisaan.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+</head>
+<body>
+
+
+    <div id="authModal" class="modal">
+        <div class="modal-content">
+            <h2 id="authTitle" data-i18n="Login">Login</h2>
+            <form id="loginForm">
+                <input type="text" id="loginPhone" placeholder="Phone Number" required pattern="[0-9]{10}">
+                <input type="password" id="loginPassword" placeholder="Password" required>
+                <button type="submit" data-i18n="Login">Login</button>
+            </form>
+            <p data-i18n="New user?">New user? <button id="showRegisterBtn" type="button" data-i18n="Register">Register here</button></p>
+            <form id="registerForm" class="hidden">
+                <input type="text" id="registerName" placeholder="Your Name" required>
+                <input type="text" id="registerPhone" placeholder="Phone Number" required pattern="[0-9]{10}">
+                <input type="password" id="registerPassword" placeholder="Password" required>
+                <button type="submit" data-i18n="Register">Register</button>
+            </form>
+            <p id="showLoginLink" class="hidden" data-i18n="Already have an account?">Already have an account? <button id="showLoginBtn" type="button" data-i18n="Login">Login here</button></p>
+        </div>
+    </div>
+
+    <div id="roleModal" class="modal hidden">
+        <div class="modal-content">
+            <h2 data-i18n="Welcome to Kissan Connect">Welcome to Kisaan Connect</h2>
+            <p data-i18n="Select your role:">Select your role:</p>
+            <button id="farmerBtn" data-i18n="Farmer">I am a Farmer</button>
+            <button id="kiranaBtn" data-i18n="Kirana Store">I am a Kirana Store Owner</button>
+        </div>
+    </div>
+
+    <header>
+    <h1 data-i18n="Kissan Connect">Kisaan Connect</h1>
+    </header>
+
+    <main>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:10px 0;">
+            <div style="display:flex;align-items:center;">
+                <label for="languageDropdown" style="margin-right:8px;font-weight:500;color:#2d572c;" data-i18n="Language:">🌐 Language:</label>
+                <select id="languageDropdown" style="padding:4px 8px;border-radius:4px;border:1px solid #2d572c;background:#f6fff6;color:#2d572c;font-weight:500;">
+                    <option value="en">English</option>
+                    <option value="hi">हिन्दी</option>
+                </select>
+            </div>
+            <button id="deleteAccountBtn" style="background:#c00;color:#fff;padding:6px 16px;border:none;border-radius:4px;font-weight:500;" data-i18n="Delete My Account">Delete My Account</button>
+        </div>
+
+        <section id="farmerSection" class="hidden">
+            <h2 data-i18n="Upload Your Produce">Upload Your Produce</h2>
+            <form id="produceForm">
+                <input type="text" id="produceName" placeholder="Produce Name" required>
+                <input type="number" id="producePrice" placeholder="Price per unit" required>
+                <input type="number" id="produceDistance" placeholder="Visible to stores within (km)" min="1" max="50" value="10" required>
+                <input type="file" id="produceImage" accept="image/*" required>
+                <button type="submit" data-i18n="Produce">Post Produce</button>
+            </form>
+            <h3 data-i18n="My Produce Posts">My Produce Posts</h3>
+            <div id="myProducePosts"></div>
+            <h3 data-i18n="Nearby Kirana Store Requests">Nearby Kirana Store Requests</h3>
+            <div id="storeRequests"></div>
+        </section>
+
+        <section id="kiranaSection" class="hidden">
+            <h2 data-i18n="Request Goods">Request Goods</h2>
+            <form id="requestForm">
+                <input type="text" id="requestName" placeholder="Requested Produce" required>
+                <input type="number" id="requestQuantity" placeholder="Quantity" required>
+                <input type="number" id="requestDistance" placeholder="Visible to farmers within (km)" min="1" max="50" value="10" required>
+                <button type="submit" data-i18n="Request">Post Request</button>
+            </form>
+            <h3 data-i18n="My Requests">My Requests</h3>
+            <div id="myRequests"></div>
+            <h3 data-i18n="Nearby Farmer Posts">Nearby Farmer Posts</h3>
+            <div id="farmerPosts"></div>
+        </section>
+
+        <section id="mapSection">
+            <h2 data-i18n="Map">Map</h2>
+            <div id="map" style="height: 300px; width: 100%;"></div>
+        </section>
+    </main>
+
+    <div id="contactModal" class="modal hidden">
+        <div class="modal-content">
+            <h2>Contact Details</h2>
+            <p id="contactInfo"></p>
+            <button id="closeContact">Close</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+        <!-- Firebase SDKs -->
+        <script src="https://www.gstatic.com/firebasejs/10.7.2/firebase-app-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/10.7.2/firebase-auth-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore-compat.js"></script>
+        <!-- Optional: Cloud Messaging -->
+        <!-- <script src="https://www.gstatic.com/firebasejs/10.7.2/firebase-messaging-compat.js"></script> -->
+
+        <script>
+                    const firebaseConfig = {
+                        apiKey: "AIzaSyBqUMK7HiPudsEpvM9lcd77IrZOHihuKHY",
+                        authDomain: "kisaan-connect-4481a.firebaseapp.com",
+                        projectId: "kisaan-connect-4481a",
+                        storageBucket: "kisaan-connect-4481a.firebasestorage.app",
+                        messagingSenderId: "924663926760",
+                        appId: "1:924663926760:web:68ea2a8bd93ee7ddca9e5d"
+                    };
+                    firebase.initializeApp(firebaseConfig);
+        </script>
+        <script src="kisaan.js"></script>
+</body>
+</html>
