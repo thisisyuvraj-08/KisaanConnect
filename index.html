@@ -1,47 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kisaan Connect | A Modern Marketplace</title>
-    
-    <!-- Google Fonts: Poppins -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Leaflet.js CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-    
-    <!-- Custom Stylesheet -->
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Kisaan Connect</title>
+  <link rel="stylesheet" href="style.css"/>
+  <!-- Mapbox GL JS & CSS -->
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet"/>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+  <!-- Firebase v12 Modular CDN -->
+  <script type="module" src="main.js"></script>
 </head>
 <body>
-
-    <!-- Loading Overlay -->
-    <div id="loading-overlay" class="visible">
-        <div class="spinner"></div>
-    </div>
-
-    <!-- Notification Banner -->
-    <div id="notification-banner">
-        <p id="notification-message"></p>
-    </div>
-
-    <div id="app" class="app-container">
-        <header id="app-header" class="app-header"></header>
-        <main id="main-content"></main>
-    </div>
-
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-        
-    <!-- Leaflet.js Script -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
-    <!-- Main JavaScript file -->
-    <script type="module" src="main.js"></script>
+  <div id="app"></div>
+  <div id="notification-banner"></div>
+  <div id="loader-overlay" class="hidden"><div class="loader"></div></div>
 </body>
 </html>
