@@ -33,19 +33,21 @@ function initialize() {
 // --- AUTHENTICATION FLOW ---
 async function handleAuthStateChanged(firebaseUser) {
     if (firebaseUser) {
-        const userRef = db.collection('users').doc(firebaseUser.uid);
-        const doc = await userRef.get();
-        if (!doc.exists) {
-            await userRef.set({
-                displayName: firebaseUser.displayName || `User-${firebaseUser.uid.substring(0, 5)}`,
-                phoneNumber: firebaseUser.phoneNumber,
-                uid: firebaseUser.uid,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        user = firebaseUser;
+        // Fetch user role from Firestore
+        const userDoc = await db.collection('users').doc(user.uid).get();
+        if (userDoc.exists) {
+            userRole = userDoc.data().role;
+        } else {
+            // If user doc doesn't exist, create it
+            await db.collection('users').doc(user.uid).set({
+                uid: user.uid,
+                displayName: user.displayName || "",
+                phoneNumber: user.phoneNumber || "",
+                role: null
             });
+            userRole = null;
         }
-        const userData = (await userRef.get()).data();
-        user = userData;
-        userRole = userData.role || null;
     } else {
         user = null;
         userRole = null;
@@ -58,7 +60,10 @@ async function handleAuthStateChanged(firebaseUser) {
 function render() {
     mainContent.innerHTML = '';
     header.innerHTML = '';
-    if (map) { map.remove(); map = null; }
+    if (map) {
+        map.remove();
+        map = null;
+    }
 
     renderHeader();
 
@@ -74,7 +79,7 @@ function render() {
 }
 
 function renderHeader() {
-    const logoHtml = `<div class="logo"><svg width="40" height="40" viewBox="0 0 24 24"><path d="M17.5 17.5C15.8 19.2 13.7 21 12 21s-3.8-1.8-5.5-3.5C4.8 15.8 3 13.7 3 12s1.8-3.8 3.5-5.5C8.2 4.8 10.3 3 12 3s3.8 1.8 5.5 3.5C19.2 8.2 21 10.3 21 12s-1.8 3.8-3.5 5.5zM12 15a3 3 0 100-6 3 3 0 000 6z" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg><h1>Kisaan Connect</h1></div>`;
+    const logoHtml = `<div class="logo"><svg width="40" height="40" viewBox="0 0 24 24"><path d="M17.5 17.5C15.8 19.2 13.7 21 12 21s-3.8-1.8-5.5-3.5C4.8 15.8 3 13.7 3 12s1.8-3.8 3.5-5.5C8.2 4.8 10.3 3 12 3s3.8 1.8 5.5 3.5C19.2 8.2 21 10.3 21 12s-1.8-3.8-3.5 5.5zM12 15a3 3 0 100-6 3 3 0 000 6z" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg><h1>Kisaan Connect</h1></div>`;
     let controlsHtml = '';
     if (user) {
         controlsHtml = `<button id="sign-out-btn" class="btn btn-outline">Sign Out</button>`;
@@ -251,7 +256,7 @@ async function startChatWith(sellerId) {
 
 // --- CHAT LOGIC ---
 function renderChatView() {
-    mainContent.innerHTML = `<div class="chat-container"><div class="chat-header"><button class="chat-back-btn" id="chat-back-btn">←</button><div class="chat-header-info"><h3>${currentChatPartner.displayName}</h3><p>${currentChatPartner.phoneNumber || 'Chatting about produce'}</p></div></div><div class="chat-messages"></div><form class="chat-input-form" id="chat-input-form"><input type="text" id="chat-input" class="chat-input" placeholder="Type a message..." autocomplete="off"><button type="submit" class="send-btn">➤</button></form></div>`;
+    mainContent.innerHTML = `<div class="chat-container"><div class="chat-header"><button class="chat-back-btn" id="chat-back-btn">←</button><div class="chat-header-info"><h3>${currentChatPartner.displayName}</h3><p>${currentChatPartner.phoneNumber || 'Chatting about produce'}</p></div></div><div class="chat-messages"></div><form class="chat-input-form" id="chat-input-form"><input type="text" id="chat-input" class="chat-input" placeholder="Type a message..." autocomplete="off"><button type="submit" class="send-btn">➤</button></div>`;
     document.getElementById('chat-back-btn').onclick = () => { if (unsubscribeChat) unsubscribeChat(); currentChatPartner = null; render(); };
     
     const chatId = [user.uid, currentChatPartner.uid].sort().join('_');
