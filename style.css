@@ -509,12 +509,23 @@ main {
   box-shadow: 0 0 0 3px rgba(46, 125, 50, 0.1);
 }
 
-#location-status {
+.location-status {
   padding: 0.8rem;
   background-color: #f9f9f9;
   border-radius: var(--radius);
   text-align: center;
   font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.location-status button {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  border: none;
+  background-color: var(--primary);
+  color: white;
+  cursor: pointer;
 }
 
 .auth-btn {
