@@ -1,17 +1,18 @@
 body {
-    font-family: 'Montserrat', 'Segoe UI', Arial, sans-serif;
+    font-family: 'Montserrat', Arial, sans-serif;
+    background: #f6f8fa;
     margin: 0;
-    background: linear-gradient(120deg, #f5fff8 0%, #e4ffe8 100%);
     color: #222;
     min-height: 100vh;
     background-attachment: fixed;
 }
 
 header {
+    text-align: center;
+    margin-top: 2rem;
     background: linear-gradient(90deg, #2d572c 0%, #36b37e 100%);
     color: #fff;
     padding: 2.2rem 2rem 1.3rem 2rem;
-    text-align: center;
     font-size: 2.5rem;
     letter-spacing: 1.5px;
     font-weight: 700;
@@ -22,14 +23,20 @@ header {
     transition: background 0.3s;
 }
 
+h1 {
+    font-size: 2.5rem;
+    color: #219150;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
 main {
-    max-width: 950px;
-    margin: 2.5rem auto;
-    background: rgba(255,255,255,0.94);
-    border-radius: 22px;
-    box-shadow: 0 6px 36px 0 #2d572c15;
-    padding: 2.7rem 2.2rem 2.5rem 2.2rem;
-    animation: fadein 1s;
+    max-width: 900px;
+    margin: 2rem auto;
+    padding: 1.5rem;
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 4px 24px #21915022;
 }
 
 @keyframes fadein {
@@ -72,11 +79,11 @@ main {
 }
 
 .btn-primary, .btn-secondary, .btn-gradient, .btn-gradient-alt, .btn-danger, .btn-link, .btn-whatsapp {
-    padding: 11px 0;
-    font-size: 1.05rem;
-    border-radius: 8px;
+    padding: 0.8rem 0;
+    font-size: 1.1rem;
+    border-radius: 0.5rem;
     border: none;
-    font-weight: 700;
+    font-weight: 600;
     width: 100%;
     margin: 6px 0 0 0;
     letter-spacing: .8px;
@@ -86,14 +93,14 @@ main {
     font-family: inherit;
 }
 .btn-primary {
-    background: linear-gradient(90deg, #36b37e 0%, #219150 100%);
+    background: #219150;
     color: #fff;
 }
 .btn-primary:hover {
-    background: linear-gradient(90deg, #219150 0%, #36b37e 100%);
+    background: #176b3a;
 }
 .btn-gradient {
-    background: linear-gradient(90deg, #23c16b, #36b37e 60%, #59be8d 100%);
+    background: linear-gradient(90deg, #219150 0%, #43e97b 100%);
     color: #fff;
 }
 .btn-gradient:hover {
@@ -102,8 +109,8 @@ main {
     box-shadow: 0 4px 20px #23c16b24;
 }
 .btn-gradient-alt {
-    background: linear-gradient(90deg, #ffb347 0%, #ffcc80 100%);
-    color: #4d3d00;
+    background: linear-gradient(90deg, #f7971e 0%, #ffd200 100%);
+    color: #222;
 }
 .btn-gradient-alt:hover {
     background: linear-gradient(90deg, #ffcc80 0%, #ffb347 100%);
@@ -120,7 +127,7 @@ main {
     transform: scale(1.06);
 }
 .btn-link {
-    background: transparent;
+    background: none;
     color: #219150;
     border: none;
     font-size: 1rem;
@@ -132,35 +139,37 @@ main {
     font-weight: 600;
 }
 .btn-link:hover {
-    color: #174b29;
+    color: #176b3a;
 }
 .btn-secondary {
-    background: #e5fbee;
-    color: #188c4b;
-    font-weight: 700;
-    border: 1.5px solid #23c16b;
+    background: #e0e0e0;
+    color: #222;
+    font-weight: 600;
+    border: none;
+    border-radius: 0.5rem;
+    padding: 0.7rem 1.2rem;
+    cursor: pointer;
     margin-top: 5px;
 }
 .btn-secondary:hover {
-    background: #23c16b;
-    color: #fff;
+    background: #cfcfcf;
 }
 .btn-whatsapp {
-    background: linear-gradient(90deg, #25d366 0%, #128c7e 100%);
+    background: #25d366;
     color: #fff;
     width: auto;
-    padding: 10px 22px;
+    padding: 0.7rem 1.2rem;
     font-size: 1.07rem;
     margin-right: 10px;
     box-shadow: 0 2px 8px #25d36640;
 }
 .btn-whatsapp:hover {
-    background: linear-gradient(90deg, #128c7e 0%, #25d366 100%);
+    background: #128c7e;
     transform: scale(1.05);
 }
 
 section {
-    margin-bottom: 2.7rem;
+    margin-bottom: 2.5rem;
 }
 
 .card, .glass-card {
@@ -171,7 +180,7 @@ section {
     margin-bottom: 1.5rem;
 }
 .glass, .glass-card {
-    background: rgba(255,255,255,0.80);
+    background: rgba(255,255,255,0.95);
     box-shadow: 0 3px 22px #36b37e11;
     backdrop-filter: blur(8px);
     border: 2.5px solid #d5ffe3;
@@ -196,21 +205,22 @@ section {
 input[type="text"],
 input[type="number"],
 input[type="password"],
-input[type="file"] {
-    padding: 0.95rem 1rem;
-    border-radius: 8px;
-    border: 1.5px solid #c6e8d2;
-    font-size: 1.09rem;
-    font-family: inherit;
-    background: #f4fff5;
-    margin-bottom: 6px;
-    transition: border .15s;
+input[type="file"],
+input[type="email"] {
+    width: 100%;
+    padding: 0.7rem 1rem;
+    margin-bottom: 1rem;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 0.5rem;
+    background: #f9f9f9;
+    transition: border 0.2s;
 }
 input[type="text"]:focus,
 input[type="number"]:focus,
-input[type="password"]:focus {
+input[type="password"]:focus,
+input[type="email"]:focus {
     outline: none;
-    border-color: #23c16b;
+    border-color: #219150;
 }
 input[type="file"] {
     background: #fff;
@@ -226,7 +236,7 @@ button[type="submit"], .btn-primary, .btn-gradient, .btn-gradient-alt {
 .modal {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(52, 199, 89, 0.15);
+    background: rgba(0,0,0,0.15);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -234,7 +244,7 @@ button[type="submit"], .btn-primary, .btn-gradient, .btn-gradient-alt {
     animation: fadein 0.7s;
 }
 .modal-content {
-    background: rgba(255,255,255,0.96);
+    background: #fff;
     padding: 2.5rem 2.2rem 2.2rem 2.2rem;
     border-radius: 18px;
     box-shadow: 0 2px 24px #2d572c3d;
