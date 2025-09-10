@@ -84,11 +84,15 @@ function renderHeader() {
 }
 
 function renderLoginScreen() {
-    mainContent.innerHTML = `<div class="auth-container card"><h2 class="auth-title">Welcome</h2><p class="auth-subtitle">Sign in to connect with local farmers and shops.</p><form id="phone-auth-form" class="auth-form"><div class="phone-input-group"><select class="form-input"><option>+91</option></select><input type="tel" id="phone-input" class="form-input" placeholder="Enter phone number" required /></div><button type="submit" class="btn btn-primary">Send OTP</button></form><div id="recaptcha-container"></div><div class="divider">or</div><button id="google-signin-btn" class="btn btn-secondary"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.2v2.7h5.3c-.2 1.9-1.6 3.7-3.6 3.7-2.8 0-5-2.2-5-5s2.2-5 5-5c1.3 0 2.2.5 2.7 1l2-2c-1.2-1.2-2.8-2-4.7-2-4.1 0-7.5 3.4-7.5 7.5s3.4 7.5 7.5 7.5c4.5 0 7.2-3.1 7.2-7.3 0-.5 0-.9-.1-1.3z"/></svg>Sign in with Google</button></div>`;
+    mainContent.innerHTML = `<div class="auth-container card"><h2 class="auth-title">Welcome</h2><p class="auth-subtitle">Sign in to connect with local farmers and shops.</p><form id="phone-auth-form" class="auth-form"><div class="phone-input-group"><select class="form-input" id="country-code"><option value="+91">+91</option></select><input type="tel" id="phone-input" class="form-input" placeholder="Enter phone number" required pattern="[0-9]{10}" maxlength="10" /></div><button type="submit" class="btn btn-primary">Send OTP</button></form><div id="recaptcha-container"></div><div class="divider">or</div><button id="google-signin-btn" class="btn btn-secondary"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M21.35 11.1h-9.2v2.7h5.3c-.2 1.9-1.6 3.7-3.6 3.7-2.8 0-5-2.2-5-5s2.2-5 5-5c1.3 0 2.2.5 2.7 1l2-2c-1.2-1.2-2.8-2-4.7-2-4.1 0-7.5 3.4-7.5 7.5s3.4 7.5 7.5 7.5c4.5 0 7.2-3.1 7.2-7.3 0-.5 0-.9-.1-1.3z"/></svg>Sign in with Google</button></div>`;
     document.getElementById('phone-auth-form').addEventListener('submit', handlePhoneSignIn);
     document.getElementById('google-signin-btn').addEventListener('click', handleGoogleSignIn);
-    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'normal' });
-    window.recaptchaVerifier.render();
+
+    // Only render reCAPTCHA if not already rendered
+    if (!window.recaptchaVerifier) {
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'normal' });
+        window.recaptchaVerifier.render();
+    }
 }
 
 function renderOtpScreen(phoneNumber) {
@@ -113,9 +117,36 @@ function renderMapView(role) {
 
 
 // --- CORE LOGIC & EVENT HANDLERS ---
-function handlePhoneSignIn(event) { event.preventDefault(); const phoneNumber = "+91" + document.getElementById('phone-input').value; auth.signInWithPhoneNumber(phoneNumber, window.recaptchaVerifier).then(c => { window.confirmationResult = c; showNotification("OTP sent!", "success"); renderOtpScreen(phoneNumber); }).catch(e => showNotification("Error: " + e.message, "error")); }
+function handlePhoneSignIn(event) {
+    event.preventDefault();
+    const countryCode = document.getElementById('country-code').value;
+    const phoneInput = document.getElementById('phone-input').value.trim();
+    if (!/^[0-9]{10}$/.test(phoneInput)) {
+        showNotification("Enter a valid 10-digit phone number.", "error");
+        return;
+    }
+    const phoneNumber = countryCode + phoneInput;
+    auth.signInWithPhoneNumber(phoneNumber, window.recaptchaVerifier)
+        .then(c => {
+            window.confirmationResult = c;
+            showNotification("OTP sent!", "success");
+            renderOtpScreen(phoneNumber);
+        })
+        .catch(e => {
+            showNotification("Error: " + e.message, "error");
+            console.error("Phone sign-in error:", e);
+        });
+}
+
 function handleOtpVerification(event) { event.preventDefault(); const otp = document.getElementById('otp-input').value; window.confirmationResult.confirm(otp).catch(e => showNotification("Invalid OTP", "error")); }
-function handleGoogleSignIn() { auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e => showNotification("Google Sign-In failed.", "error")); }
+function handleGoogleSignIn() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider)
+        .catch(e => {
+            showNotification("Google Sign-In failed: " + e.message, "error");
+            console.error("Google Sign-In error:", e);
+        });
+}
 async function setUserRole(role) { await db.collection('users').doc(user.uid).update({ role }); userRole = role; render(); }
 
 async function initializeMapWithData() {
