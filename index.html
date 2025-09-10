@@ -14,13 +14,14 @@
         <div class="modal-content glass">
             <h2 id="authTitle" data-i18n="Login">Login</h2>
             <form id="loginForm">
-                <input type="text" id="loginPhone" placeholder="Phone Number" required pattern="[0-9]{10}">
+                <input type="email" id="loginEmail" placeholder="Email" required>
                 <input type="password" id="loginPassword" placeholder="Password" required>
                 <button type="submit" data-i18n="Login" class="btn-primary">Login</button>
             </form>
             <p data-i18n="New user?"><button id="showRegisterBtn" type="button" data-i18n="Register" class="btn-link">Register here</button></p>
             <form id="registerForm" class="hidden">
                 <input type="text" id="registerName" placeholder="Your Name" required>
+                <input type="email" id="registerEmail" placeholder="Email" required>
                 <input type="text" id="registerPhone" placeholder="Phone Number" required pattern="[0-9]{10}">
                 <input type="password" id="registerPassword" placeholder="Password" required>
                 <button type="submit" data-i18n="Register" class="btn-primary">Register</button>
@@ -118,12 +119,11 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.2/firebase-firestore-compat.js"></script>
     <script>
-        // Your new Firebase config
         const firebaseConfig = {
             apiKey: "AIzaSyDnhwxpN_6VXNY2rkfKJuA5XFmSERSOFsM",
             authDomain: "kisaan-connect-da56d.firebaseapp.com",
             projectId: "kisaan-connect-da56d",
-            storageBucket: "kisaan-connect-da56d.firebasestorage.app",
+            storageBucket: "kisaan-connect-da56d.appspot.com", // <-- FIXED
             messagingSenderId: "401721766160",
             appId: "1:401721766160:web:29644ebd5bcc3116f07595",
             measurementId: "G-9VQVCJYCWE"
