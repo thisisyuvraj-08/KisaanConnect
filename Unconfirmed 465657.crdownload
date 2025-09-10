@@ -1,0 +1,175 @@
+// Farmer-specific JavaScript functionality
+
+// Initialize map (pseudo-code as actual map implementation would require API key)
+function initMap() {
+    // This would initialize a map with the farmer's location
+    console.log("Map would be initialized here");
+}
+
+// Add product to Firestore
+document.getElementById('addProductForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    
+    // Get current user
+    const user = auth.currentUser;
+    
+    if (!user) {
+        alert('Please log in to add products');
+        return;
+    }
+    
+    // Get form values
+    const productName = document.querySelector('#addProductForm input[type="text"]').value;
+    const category = document.querySelector('#addProductForm select').value;
+    const quantity = document.querySelector('#addProductForm input[type="number"]').value;
+    const unit = document.querySelectorAll('#addProductForm select')[1].value;
+    const price = document.querySelectorAll('#addProductForm input[type="number"]')[1].value;
+    const description = document.querySelector('#addProductForm textarea').value;
+    const visibilityRange = document.getElementById('visibilityRange').value;
+    
+    // Add product to Firestore
+    db.collection('products').add({
+        farmerId: user.uid,
+        productName: productName,
+        category: category,
+        quantity: quantity,
+        unit: unit,
+        price: price,
+        description: description,
+        visibilityRange: visibilityRange,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        status: 'active'
+    })
+    .then((docRef) => {
+        alert('Product added successfully!');
+        document.getElementById('addProductForm').reset();
+        // Refresh product list
+        loadFarmerProducts();
+    })
+    .catch((error) => {
+        alert('Error adding product: ' + error.message);
+    });
+});
+
+// Load farmer's products
+function loadFarmerProducts() {
+    const user = auth.currentUser;
+    
+    if (!user) return;
+    
+    db.collection('products')
+        .where('farmerId', '==', user.uid)
+        .orderBy('createdAt', 'desc')
+        .get()
+        .then((querySnapshot) => {
+            const productsTable = document.querySelector('.table tbody');
+            productsTable.innerHTML = '';
+            
+            querySnapshot.forEach((doc) => {
+                const product = doc.data();
+                const row = document.createElement('tr');
+                
+                row.innerHTML = `
+                    <td>${product.productName}</td>
+                    <td>${product.quantity} ${product.unit}</td>
+                    <td>₹${product.price}/${product.unit}</td>
+                    <td><span class="badge bg-success">${product.status}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary me-1" onclick="editProduct('${doc.id}')">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteProduct('${doc.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+                
+                productsTable.appendChild(row);
+            });
+        })
+        .catch((error) => {
+            console.error('Error loading products: ', error);
+        });
+}
+
+// Edit product
+function editProduct(productId) {
+    // Implementation for editing a product
+    console.log('Edit product: ', productId);
+}
+
+// Delete product
+function deleteProduct(productId) {
+    if (confirm('Are you sure you want to delete this product?')) {
+        db.collection('products').doc(productId).delete()
+            .then(() => {
+                alert('Product deleted successfully');
+                loadFarmerProducts();
+            })
+            .catch((error) => {
+                alert('Error deleting product: ' + error.message);
+            });
+    }
+}
+
+// Load farmer's orders
+function loadFarmerOrders() {
+    const user = auth.currentUser;
+    
+    if (!user) return;
+    
+    db.collection('orders')
+        .where('farmerId', '==', user.uid)
+        .orderBy('createdAt', 'desc')
+        .get()
+        .then((querySnapshot) => {
+            const ordersList = document.querySelector('.list-group');
+            ordersList.innerHTML = '';
+            
+            querySnapshot.forEach((doc) => {
+                const order = doc.data();
+                const orderItem = document.createElement('div');
+                orderItem.className = 'list-group-item';
+                
+                // Format date
+                const orderDate = order.createdAt.toDate();
+                const formattedDate = formatDate(orderDate);
+                
+                orderItem.innerHTML = `
+                    <div class="d-flex w-100 justify-content-between">
+                        <h6 class="mb-1">Order #${doc.id} - ${order.storeName}</h6>
+                        <small class="text-${order.status === 'completed' ? 'success' : 'warning'}">${order.status}</small>
+                    </div>
+                    <p class="mb-1">${order.items}</p>
+                    <small>Total: ₹${order.total} • ${formattedDate}</small>
+                `;
+                
+                ordersList.appendChild(orderItem);
+            });
+        })
+        .catch((error) => {
+            console.error('Error loading orders: ', error);
+        });
+}
+
+// Format date function
+function formatDate(date) {
+    const now = new Date();
+    const diffTime = Math.abs(now - date);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 0) {
+        return 'Today';
+    } else if (diffDays === 1) {
+        return 'Yesterday';
+    } else {
+        return `${diffDays} days ago`;
+    }
+}
+
+// Initialize farmer dashboard
+document.addEventListener('DOMContentLoaded', () => {
+    loadFarmerProducts();
+    loadFarmerOrders();
+    initMap();
+});
