@@ -1,24 +1,18 @@
-// Kisaan Connect SPA Logic (Improved)
-// ===================================
-// Now features: better map sizing, Instagram-like chat UI, improved voice parsing,
-// "My Posts" tab, real-time chat for both parties, and post feedback snackbar.
+// Kisaan Connect - Full SPA (Nearby Filtering, Role UI, Map/UI fixes)
+// Author: Youfloww
 
-// ---- FIREBASE INIT ----
 const db = firebase.firestore();
 const auth = firebase.auth();
 
-// ---- GLOBAL STATE ----
 let currentUser = null;
 let userData = null;
 let unsubscribeDashboard = null;
 let unsubscribeMyPosts = null;
 let map = null;
 let markersLayer = null;
-let currentPanelData = [];
-let myPostsData = [];
+let userLocation = null;
 let isMyPostsActive = false;
 
-// ---- DOM ELEMENTS ----
 const $ = q => document.querySelector(q);
 const $$ = q => Array.from(document.querySelectorAll(q));
 const mainApp = $('#main-app');
@@ -48,7 +42,7 @@ function showSnackbar(msg) {
   snackbarTimeout = setTimeout(() => sb.classList.remove('show'), 2500);
 }
 
-// ---- UTILS ----
+// Utils
 function formatTime(ts) {
   const d = ts instanceof Date ? ts : ts?.toDate ? ts.toDate() : new Date(ts);
   const now = new Date();
@@ -64,13 +58,22 @@ function escapeHTML(str) {
 function show(el) { el.classList.remove('hidden'); }
 function hide(el) { el.classList.add('hidden'); }
 function scrollToBottom(el) { el.scrollTop = el.scrollHeight; }
-function randomId() { return Math.random().toString(36).slice(2,10); }
 function getAvatarUrl(name) {
-  // Use a simple avatar (could use dicebear, robohash, etc.)
   return `https://api.dicebear.com/7.x/thumbs/svg?seed=${encodeURIComponent(name)}`;
 }
+function haversine(lat1, lon1, lat2, lon2) {
+  function toRad(x) { return x * Math.PI / 180; }
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
-// ---- AUTH SCREEN LOGIC ----
+// Auth
 function setupAuth() {
   $('#show-login').onclick = () => { showLogin(); };
   $('#show-register').onclick = () => { showRegister(); };
@@ -124,7 +127,7 @@ function setupAuth() {
   };
 }
 
-// ---- AUTH STATE HANDLING ----
+// Auth state
 auth.onAuthStateChanged(async user => {
   if (user) {
     const doc = await db.collection('users').doc(user.uid).get();
@@ -147,22 +150,27 @@ auth.onAuthStateChanged(async user => {
   }
 });
 
-// ---- LOGOUT ----
-logoutBtn.onclick = async () => {
-  await auth.signOut();
-};
+// Logout
+logoutBtn.onclick = async () => { await auth.signOut(); };
 
-// ---- MAIN APP SETUP ----
+// Main app setup
 function setupMainApp() {
-  // Map
   if (!map) setupMap();
-  // Dashboard and MyPosts Tabs
-  setupDashboardTabs();
-  // FAB
-  setupFAB();
+  getUserLocation().then(loc => {
+    userLocation = loc;
+    if (map && loc) {
+      setTimeout(() => map.setView([loc.lat, loc.lng], 13), 500);
+    }
+    setupDashboardTabs();
+    setupFAB();
+  }).catch(() => {
+    userLocation = null;
+    setupDashboardTabs();
+    setupFAB();
+  });
 }
 
-// ---- MAIN APP TEARDOWN ----
+// Main app teardown
 function teardownMainApp() {
   if (unsubscribeDashboard) unsubscribeDashboard();
   if (unsubscribeMyPosts) unsubscribeMyPosts();
@@ -172,66 +180,83 @@ function teardownMainApp() {
   closeChat();
 }
 
-// ---- MAP SETUP ----
+// Map setup
 function setupMap() {
-  map = L.map('map', { zoomControl: true, attributionControl: false }).setView([23.2, 78.6], 5.5);
+  map = L.map('map', { zoomControl: true, attributionControl: false }).setView([20.5937, 78.9629], 5.5);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap'
   }).addTo(map);
   markersLayer = L.layerGroup().addTo(map);
 }
 
-// ---- DASHBOARD TABS ----
+// Dashboard Tabs
 function setupDashboardTabs() {
-  dashboardPanel.innerHTML = `
-    <div class="dashboard-tabs">
-      <button class="tab-btn active" id="tab-market">Marketplace</button>
-      <button class="tab-btn" id="tab-myposts">My Posts</button>
-    </div>
-    <div id="tab-content"></div>
-  `;
-  $('#tab-market').onclick = () => activateTab('market');
-  $('#tab-myposts').onclick = () => activateTab('myposts');
-  activateTab('market');
+  if (userData.role === 'farmer') {
+    dashboardPanel.innerHTML = `
+      <div class="dashboard-tabs">
+        <button class="tab-btn active" id="tab-market">Marketplace</button>
+        <button class="tab-btn" id="tab-myposts">My Posts</button>
+      </div>
+      <div id="tab-content"></div>
+    `;
+    $('#tab-market').onclick = () => activateTab('market');
+    $('#tab-myposts').onclick = () => activateTab('myposts');
+    activateTab('market');
+  } else {
+    dashboardPanel.innerHTML = `
+      <div class="dashboard-tabs">
+        <button class="tab-btn active" id="tab-market">Marketplace</button>
+      </div>
+      <div id="tab-content"></div>
+    `;
+    $('#tab-market').onclick = () => activateTab('market');
+    activateTab('market');
+  }
 }
+
 function activateTab(tab) {
   isMyPostsActive = (tab === 'myposts');
   $$('#dashboard-panel .tab-btn').forEach(b => b.classList.remove('active'));
   if (tab === 'market') {
     $('#tab-market').classList.add('active');
     setupDashboard();
-  } else {
+  } else if (tab === 'myposts') {
     $('#tab-myposts').classList.add('active');
     setupMyPosts();
   }
 }
 
-// ---- DASHBOARD: MARKET ----
+// Dashboard: MARKET
 function setupDashboard() {
   if (unsubscribeDashboard) unsubscribeDashboard();
-  let col, oppositeRole;
+  let col, filterRole;
   if (userData.role === 'farmer') {
     col = 'requests';
-    oppositeRole = 'owner';
+    filterRole = 'owner';
   } else {
     col = 'produce';
-    oppositeRole = 'farmer';
+    filterRole = 'farmer';
   }
   unsubscribeDashboard = db.collection(col)
     .orderBy('timestamp', 'desc')
     .onSnapshot(snap => {
       const items = [];
       snap.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
-      currentPanelData = items;
-      renderDashboard(items, col);
-      updateMapMarkers(items, col);
+      // Filter to 10km range if user location is available
+      const filtered = (userLocation && userLocation.lat)
+        ? items.filter(item =>
+            item.location && haversine(userLocation.lat, userLocation.lng, item.location.lat, item.location.lng) <= 10
+          )
+        : items;
+      renderDashboard(filtered, col);
+      updateMapMarkers(filtered, col);
     });
 }
 function renderDashboard(items, type) {
   let html = '';
   if (!items.length) {
     html = `<div class="empty-state">
-      No ${type === 'produce' ? 'produce' : 'requests'} available yet.<br>
+      No ${type === 'produce' ? 'produce' : 'requests'} available nearby.<br>
       Click <b>+</b> below to add ${type === 'produce' ? 'produce' : 'a request'}!
     </div>`;
   } else {
@@ -258,17 +283,16 @@ function renderDashboard(items, type) {
   });
 }
 
-// ---- MY POSTS TAB ----
+// MY POSTS
 function setupMyPosts() {
   if (unsubscribeMyPosts) unsubscribeMyPosts();
-  let col = (userData.role === 'farmer') ? 'produce' : 'requests';
+  let col = 'produce';
   unsubscribeMyPosts = db.collection(col)
     .where('userId', '==', currentUser.uid)
     .orderBy('timestamp', 'desc')
     .onSnapshot(snap => {
       const items = [];
       snap.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
-      myPostsData = items;
       renderMyPosts(items, col);
     });
 }
@@ -300,7 +324,7 @@ function renderMyPosts(items, type) {
     btn.onclick = e => {
       e.stopPropagation();
       const id = btn.closest('.myposts-item').dataset.id;
-      let col = (userData.role === 'farmer') ? 'produce' : 'requests';
+      let col = 'produce';
       if (confirm('Delete this post?')) {
         db.collection(col).doc(id).delete();
         showSnackbar("Deleted!");
@@ -309,7 +333,7 @@ function renderMyPosts(items, type) {
   });
 }
 
-// ---- MAP MARKERS ----
+// Map Markers
 function updateMapMarkers(items, type) {
   if (!markersLayer) return;
   markersLayer.clearLayers();
@@ -329,16 +353,17 @@ function updateMapMarkers(items, type) {
   });
 }
 
-// ---- FAB LOGIC ----
+// FAB
 function setupFAB() {
   fab.onclick = () => {
     if (userData.role === 'farmer') openPostProduceModal();
     else openPostRequestModal();
   };
   fab.title = userData.role === 'farmer' ? 'Post Produce' : 'Post Request';
+  fab.classList.remove('hidden');
 }
 
-// ---- DETAILS MODAL ----
+// Details Modal
 function openDetailsModal(item, type) {
   if (!item) return;
   detailsModal.innerHTML = `
@@ -377,7 +402,7 @@ function closeModal() {
   hide(detailsModal);
 }
 
-// ---- POST PRODUCE MODAL (FARMER) ----
+// Post Produce (Farmer)
 function openPostProduceModal() {
   detailsModal.innerHTML = `
     <div class="modal-content">
@@ -421,13 +446,12 @@ function openPostProduceModal() {
     });
     closeModal();
     showSnackbar("Posted successfully!");
-    // If on "My Posts", reload it immediately
     if (isMyPostsActive) setupMyPosts();
   };
   $$('.modal-close').forEach(el => { el.onclick = closeModal; });
 }
 
-// ---- POST REQUEST MODAL (OWNER) ----
+// Post Request (Shop Owner)
 function openPostRequestModal() {
   detailsModal.innerHTML = `
     <div class="modal-content">
@@ -468,12 +492,11 @@ function openPostRequestModal() {
     });
     closeModal();
     showSnackbar("Request posted!");
-    if (isMyPostsActive) setupMyPosts();
   };
   $$('.modal-close').forEach(el => { el.onclick = closeModal; });
 }
 
-// ---- GEOLOCATION ----
+// Geolocation
 function getUserLocation() {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject('Geolocation not available');
@@ -484,7 +507,7 @@ function getUserLocation() {
   });
 }
 
-// ---- VOICE TO FORM (Produce/Request) ----
+// Voice to form
 function setupProduceVoiceInput() {
   setupVoiceInput(
     $('#produce-mic'), $('#mic-status'),
@@ -522,8 +545,6 @@ function setupRequestVoiceInput() {
     }
   );
 }
-
-// ---- GENERIC VOICE INPUT SETUP ----
 function setupVoiceInput(micBtn, statusEl, callback) {
   let recognizing = false;
   let recognition;
@@ -537,7 +558,7 @@ function setupVoiceInput(micBtn, statusEl, callback) {
       return;
     }
     recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = 'en-IN'; // Accepts both
+    recognition.lang = 'en-IN';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     recognizing = true;
@@ -571,54 +592,40 @@ function listenOnce(lang, cb) {
   recognition.onresult = e => cb(e.results[0][0].transcript);
   recognition.start();
 }
-
-// ---- ADVANCED VOICE INTENT PARSING ----
 async function getIntentFromVoiceCommand(text) {
-  // Handles: "50 kg tomatoes rs 50 per kg", "I want to sell 100 kilo onions at 40 rupees", etc.
   let item = '';
   let quantity = '';
   let price = '';
   let lower = text.toLowerCase();
 
-  // Extract quantity (number before "kg", "kilo", or just a number)
   let qtyMatch = lower.match(/(\d+(\.\d+)?)\s*(kg|kilo|kilogram|किलो)?/) || [];
   if (qtyMatch[1]) quantity = qtyMatch[1];
-
-  // Extract price (number before/after "rs", "price", "per kg", "₹")
   let priceMatch = lower.match(/(?:rs|₹|rupees?|price|पर|per)\s*(\d+(\.\d+)?)/) || lower.match(/(\d+(\.\d+)?)\s*(rs|₹|rupees?|price|per)/i) || [];
   if (priceMatch[1]) price = priceMatch[1];
 
-  // Extract item: the word(s) between quantity and price, or after quantity
   let itemMatch = lower;
   if (quantity) {
     itemMatch = itemMatch.split(quantity)[1] || '';
-    // Remove common units/price words
     itemMatch = itemMatch.replace(/(kg|kilo|kilogram|per|price|rs|₹|rupees?|at|mein|मे|पर|प्राइस|कीमत|rs|₹|\d+)/g, '').trim();
-    // If price is present, cut off after that
     if (price) itemMatch = itemMatch.split(price)[0];
-    // Take first 1-2 words
     item = itemMatch.split(' ').filter(w => w.length > 2)[0] || '';
   }
-  // fallback: try to find item from a veg/fruits list
   if (!item) {
     const items = ['tomato','onion','potato','cabbage','carrot','chili','cauliflower','beans','peas','brinjal','apple','banana','mango','pomegranate','orange','lemon','bhindi','ladyfinger','gobhi','gajar','mooli','radish','kheera','cucumber','mirchi'];
     for (const it of items) if (lower.includes(it)) item = it;
   }
-  // fallback: just take first word after "kg" or "kilo"
   if (!item) {
     let m = lower.match(/(?:kg|kilo|kilogram|किलो)\s+(\w+)/);
     if (m) item = m[1];
   }
-  // fallback: first noun-looking word
   if (!item) {
     item = lower.split(' ').find(w => w.length > 3 && !/\d/.test(w)) || '';
   }
-  // Capitalize item
   if (item) item = item.charAt(0).toUpperCase() + item.slice(1);
   return { item, quantity, price };
 }
 
-// ---- CHAT LOGIC ----
+// Chat
 let chatUnsub = null;
 let currentChatRoomId = null;
 let otherUserId = null;
@@ -628,7 +635,6 @@ function openChatWindow(uid, name, phone) {
   otherUserId = uid;
   otherUserName = name;
   otherUserPhone = phone;
-  // Deterministic chat room id: [smallerUid]_[largerUid]
   const myUid = currentUser.uid;
   currentChatRoomId = myUid < uid ? `${myUid}_${uid}` : `${uid}_${myUid}`;
   chatWindow.innerHTML = `
@@ -648,7 +654,6 @@ function openChatWindow(uid, name, phone) {
   $('#chat-form').onsubmit = sendChatMsg;
   setupChatVoiceInput();
 
-  // Real-time messages
   if (chatUnsub) chatUnsub();
   chatUnsub = db.collection('chats').doc(currentChatRoomId)
     .collection('messages').orderBy('timestamp')
@@ -694,8 +699,6 @@ function renderChatMessages(msgs) {
   }).join('');
   scrollToBottom(el);
 }
-
-// ---- CHAT VOICE INPUT ----
 function setupChatVoiceInput() {
   const micBtn = $('#chat-mic');
   let recognizing = false;
@@ -734,7 +737,7 @@ function setupChatVoiceInput() {
   };
 }
 
-// ---- INITIALIZE ----
+// INIT
 document.addEventListener('DOMContentLoaded', () => {
   setupAuth();
 });
