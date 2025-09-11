@@ -344,7 +344,7 @@ document.addEventListener('DOMContentLoaded', () => {
             chatContainer.classList.add('hidden');
         };
         document.getElementById('close-chat-btn').onclick = stopListening;
-        unsubscribeListeners.push(unsubscribe);
+        unsubscribeListeners.push(unsubscribe); // Add to global listeners to be cleared on logout
 
         const sendMessage = () => {
             const text = messageInput.value.trim();
@@ -377,4 +377,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const diffInDays = Math.floor(diffInHours / 24);
         return `${diffInDays} days ago`;
     }
+
+    // --- Initial Load ---
+    // Start by showing the login form. The onAuthStateChanged listener will take over from here.
+    renderAuthForm('login');
 });
