@@ -1,35 +1,28 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Kisaan Connect</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="stylesheet" href="style.css">
-  <!-- Google Fonts: Poppins for title, Nunito for body -->
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600&family=Poppins:wght@700&display=swap" rel="stylesheet">
-  <!-- Leaflet CSS -->
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="stylesheet" href="style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600&family=Poppins:wght@700&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-  <!-- Material Icons -->
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
   <meta name="theme-color" content="#388e3c"/>
 </head>
 <body>
-  <!-- Header -->
   <header id="main-header" class="hidden">
     <div class="logo-title">
       <span class="material-icons" style="color:#388e3c;">agriculture</span>
-      <span id="app-title" class="kc-title">Kisaan Connect</span>
+      <span class="kc-title">Kisaan Connect</span>
     </div>
     <div id="user-info">
       <span id="user-name"></span>
-      <button id="logout-btn" title="Logout">
-        <span class="material-icons">logout</span>
-      </button>
+      <button id="logout-btn" title="Logout"><span class="material-icons">logout</span></button>
     </div>
   </header>
 
-  <!-- Auth Section -->
   <section id="auth-section" class="centered-section">
     <div class="auth-card">
       <h2 id="auth-title">Login</h2>
@@ -50,21 +43,14 @@
         </select>
         <button type="submit">Register</button>
       </form>
-      <p>
-        <span id="toggle-auth">Don't have an account? Register</span>
-      </p>
+      <p><span id="toggle-auth">Don't have an account? Register</span></p>
       <div id="auth-error" class="error-msg"></div>
     </div>
   </section>
 
-  <!-- Main Application Interface -->
   <main id="app-main" class="hidden">
     <section class="main-container">
-      <!-- Map Panel -->
-      <div id="map-panel">
-        <div id="map"></div>
-      </div>
-      <!-- Dashboard Panel -->
+      <div id="map-panel"><div id="map"></div></div>
       <div id="dashboard-panel">
         <div class="dashboard-tabs">
           <button id="marketplace-tab" class="active">Marketplace</button>
@@ -73,42 +59,32 @@
         <div id="dashboard-list"></div>
       </div>
     </section>
-    <!-- Floating Action Button -->
-    <button id="fab" class="fab" title="Add New">
-      <span class="material-icons" style="font-size:2.5em;">add</span>
-    </button>
+    <button id="fab" class="fab" title="Add New"><span class="material-icons" style="font-size:2.5em;">add</span></button>
   </main>
 
-  <!-- Post/Request Modal -->
   <div id="post-modal" class="modal hidden">
     <div class="modal-content">
       <span class="close-modal material-icons" id="close-post-modal">close</span>
       <h2 id="post-modal-title">Post Produce</h2>
       <form id="post-form">
         <input type="text" id="item-name" placeholder="Item Name (e.g., Onion)" required>
-        <div class="input-row">
-          <input type="number" id="quantity" placeholder="Quantity" min="1" required>
+        <div class="input-row"><input type="number" id="quantity" placeholder="Quantity" min="1" required>
           <select id="unit">
             <option value="kg">Kg</option>
             <option value="quintal">Quintal</option>
             <option value="piece">Piece</option>
           </select>
         </div>
-        <div class="input-row">
-          <input type="number" id="price" placeholder="Price per unit" min="1" required>
+        <div class="input-row"><input type="number" id="price" placeholder="Price per unit" min="1" required>
           <select id="price-unit">
             <option value="kg">Per Kg</option>
             <option value="quintal">Per Quintal</option>
             <option value="piece">Per Piece</option>
           </select>
         </div>
-        <div class="input-row">
-          <input type="date" id="expiration" required>
-        </div>
+        <div class="input-row"><input type="date" id="expiration" required></div>
         <div class="voice-row">
-          <button type="button" id="voice-btn" class="voice-btn" title="Voice Input">
-            <span class="material-icons">mic</span>
-          </button>
+          <button type="button" id="voice-btn" class="voice-btn" title="Voice Input"><span class="material-icons">mic</span></button>
           <span id="voice-status"></span>
         </div>
         <button type="submit" id="submit-post-btn">Submit</button>
@@ -117,27 +93,19 @@
     </div>
   </div>
 
-  <!-- Details Modal -->
   <div id="details-modal" class="modal hidden">
     <div class="modal-content">
       <span class="close-modal material-icons" id="close-details-modal">close</span>
       <h2 id="details-title"></h2>
       <div id="details-info"></div>
       <div class="details-actions">
-        <button id="whatsapp-btn" class="details-btn">
-          <span class="material-icons">whatsapp</span> Chat on WhatsApp
-        </button>
-        <button id="inapp-chat-btn" class="details-btn">
-          <span class="material-icons">chat</span> Chat in App
-        </button>
-        <button id="close-details-btn" class="details-btn">
-          <span class="material-icons">close</span> Close
-        </button>
+        <button id="whatsapp-btn" class="details-btn"><span class="material-icons">whatsapp</span> Chat on WhatsApp</button>
+        <button id="inapp-chat-btn" class="details-btn"><span class="material-icons">chat</span> Chat in App</button>
+        <button id="close-details-btn" class="details-btn"><span class="material-icons">close</span> Close</button>
       </div>
     </div>
   </div>
 
-  <!-- Chat Window -->
   <div id="chat-window" class="chat-window hidden">
     <div class="chat-header">
       <span id="chat-user-name"></span>
@@ -146,27 +114,17 @@
     <div id="chat-messages" class="chat-messages"></div>
     <form id="chat-form" autocomplete="off">
       <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off"/>
-      <button type="button" id="chat-voice-btn" title="Send Voice">
-        <span class="material-icons">mic</span>
-      </button>
-      <button type="submit" id="chat-send-btn">
-        <span class="material-icons">send</span>
-      </button>
+      <button type="button" id="chat-voice-btn" title="Send Voice"><span class="material-icons">mic</span></button>
+      <button type="submit" id="chat-send-btn"><span class="material-icons">send</span></button>
     </form>
   </div>
 
-  <!-- Overlay Loader -->
-  <div id="loader" class="loader hidden">
-    <div class="spinner"></div>
-  </div>
+  <div id="loader" class="loader hidden"><div class="spinner"></div></div>
 
-  <!-- Firebase -->
+  <!-- Firebase config -->
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <!-- Main App Script -->
   <script>
     const firebaseConfig = {
       apiKey: "AIzaSyDnhwxpN_6VXNY2rkfKJuA5XFmSERSOFsM",
@@ -179,13 +137,11 @@
     };
     firebase.initializeApp(firebaseConfig);
   </script>
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="app.js"></script>
   <script>
-    // PWA - Register Service Worker
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('service-worker.js');
-      });
+      window.addEventListener('load', () => navigator.serviceWorker.register('service-worker.js'));
     }
   </script>
 </body>
