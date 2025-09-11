@@ -1,81 +1,251 @@
-import { auth, db } from './firebase.js';
-import { 
-    createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword, 
+// This file uses modern JavaScript modules.
+// Make sure your script tag in index.html has type="module".
+
+// Import the functions you need from the Firebase SDKs
+import {
+    getAuth,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
     onAuthStateChanged,
-    signOut 
+    signOut
 } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js";
-import { 
-    doc, 
-    setDoc, 
+import {
+    getFirestore,
+    doc,
+    setDoc,
     getDoc,
     collection,
     addDoc,
     query,
-    where,
     onSnapshot,
-    serverTimestamp
+    serverTimestamp,
+    orderBy
 } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js";
 
-// Global state
-let currentUser = null;
-let map;
 
-// --- AUTHENTICATION ---
+// --- Firebase Initialization (from the script tag in index.html) ---
+const auth = getAuth();
+const db = getFirestore();
+
+// --- Global State and Elements ---
 const authContainer = document.getElementById('auth-container');
 const appContainer = document.getElementById('app');
+const modalContainer = document.getElementById('modal-container');
 
+let currentUser = null;
+let map;
+let unsubscribeListeners = []; // To manage real-time listeners
+
+// --- Main Application Flow ---
+
+// This is the core function that runs when the page loads.
+// It checks if a user is logged in or not.
 onAuthStateChanged(auth, async (user) => {
+    // Clear any previous real-time listeners to prevent data leaks between logins
+    unsubscribeListeners.forEach(unsubscribe => unsubscribe());
+    unsubscribeListeners = [];
+
     if (user) {
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        currentUser = { uid: user.uid, email: user.email, ...userDoc.data() };
-        
+        // User is logged in
+        const userDocRef = doc(db, "users", user.uid);
+        const userDoc = await getDoc(userDocRef);
+        currentUser = { uid: user.uid, ...userDoc.data() };
+
         appContainer.classList.remove('hidden');
         authContainer.classList.add('hidden');
-        
-        document.getElementById('user-display-name').textContent = currentUser.name;
-        initializeApp();
+
+        initializeAppUI();
     } else {
+        // User is logged out
         currentUser = null;
         appContainer.classList.add('hidden');
         authContainer.classList.remove('hidden');
-        renderLoginForm();
+        renderAuthForm('login');
     }
 });
 
-function renderLoginForm() {
-    authContainer.innerHTML = `
-        <div class="auth-form">
-            <h2>Login</h2>
-            <input type="email" id="login-email" placeholder="Email" required>
-            <input type="password" id="login-password" placeholder="Password" required>
-            <button id="login-btn">Login</button>
-            <p id="show-register">Don't have an account? Register</p>
-        </div>
-    `;
-    document.getElementById('login-btn').addEventListener('click', handleLogin);
-    document.getElementById('show-register').addEventListener('click', renderRegisterForm);
+function initializeAppUI() {
+    document.getElementById('user-display-name').textContent = `Welcome, ${currentUser.name}`;
+    document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
+    
+    // Initialize the map only if it hasn't been created yet
+    if (!map) {
+        // A real app would get the user's location. We'll use a default.
+        map = L.map('map').setView([12.9141, 79.1325], 13); // Centered on Vellore
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    }
+    
+    setupDashboardForRole();
 }
 
-function renderRegisterForm() {
-    authContainer.innerHTML = `
+function setupDashboardForRole() {
+    const dashboard = document.getElementById('dashboard');
+    const postBtn = document.getElementById('post-btn');
+
+    // Change the UI based on whether the user is a farmer or an owner
+    if (currentUser.role === 'farmer') {
+        dashboard.innerHTML = `<h2>Kirana Requests</h2><div id="item-list"></div>`;
+        postBtn.textContent = "Post Produce";
+        postBtn.onclick = () => renderPostModal('produce');
+        listenForData('requests');
+    } else { // Kirana Owner
+        dashboard.innerHTML = `<h2>Available Produce</h2><div id="item-list"></div>`;
+        postBtn.textContent = "Post Request";
+        postBtn.onclick = () => renderPostModal('request');
+        listenForData('produce');
+    }
+}
+
+// --- Real-time Data Functions ---
+
+function listenForData(collectionName) {
+    const itemsCollection = collection(db, collectionName);
+    const q = query(itemsCollection, orderBy("timestamp", "desc"));
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+        const itemList = document.getElementById('item-list');
+        if (!itemList) return;
+        itemList.innerHTML = ''; 
+        map.eachLayer(layer => { if (layer instanceof L.Marker) map.removeLayer(layer); });
+
+        snapshot.forEach((doc) => {
+            const item = { id: doc.id, ...doc.data() };
+            renderItemCard(itemList, item, collectionName.slice(0, -1)); // 'produce' or 'request'
+            renderMapMarker(item, collectionName.slice(0, -1));
+        });
+    });
+    unsubscribeListeners.push(unsubscribe); // Store the listener so we can stop it on logout
+}
+
+// --- UI Rendering Functions ---
+
+function renderAuthForm(formType) {
+    const content = formType === 'login' ? `
         <div class="auth-form">
-            <h2>Register</h2>
-            <input type="text" id="register-name" placeholder="Full Name" required>
-            <input type="tel" id="register-phone" placeholder="Phone Number (for WhatsApp)" required>
-            <input type="email" id="register-email" placeholder="Email" required>
-            <input type="password" id="register-password" placeholder="Password" required>
-            <select id="register-role">
-                <option value="farmer">I am a Farmer</option>
-                <option value="owner">I am a Kirana Owner</option>
-            </select>
-            <button id="register-btn">Register</button>
-            <p id="show-login">Already have an account? Login</p>
+            <h2>Login to Kisaan Connect</h2>
+            <div class="input-group"><input type="email" id="login-email" placeholder="Email" required></div>
+            <div class="input-group"><input type="password" id="login-password" placeholder="Password" required></div>
+            <button id="login-btn" class="button-primary">Login</button>
+            <p class="toggle-auth" data-form="register">Don't have an account? Register</p>
+        </div>` : `
+        <div class="auth-form">
+            <h2>Create an Account</h2>
+            <div class="input-group"><input type="text" id="register-name" placeholder="Full Name" required></div>
+            <div class="input-group"><input type="tel" id="register-phone" placeholder="Phone (e.g., 919876543210)" required></div>
+            <div class="input-group"><input type="email" id="register-email" placeholder="Email" required></div>
+            <div class="input-group"><input type="password" id="register-password" placeholder="Password" required></div>
+            <div class="input-group">
+                <select id="register-role">
+                    <option value="farmer">I am a Farmer</option>
+                    <option value="owner">I am a Kirana Owner</option>
+                </select>
+            </div>
+            <button id="register-btn" class="button-primary">Register</button>
+            <p class="toggle-auth" data-form="login">Already have an account? Login</p>
+        </div>`;
+    authContainer.innerHTML = content;
+    attachAuthFormListeners();
+}
+
+function attachAuthFormListeners() {
+    if (document.getElementById('login-btn')) {
+        document.getElementById('login-btn').addEventListener('click', handleLogin);
+    }
+    if (document.getElementById('register-btn')) {
+        document.getElementById('register-btn').addEventListener('click', handleRegister);
+    }
+    document.querySelector('.toggle-auth').addEventListener('click', (e) => {
+        const formType = e.target.dataset.form;
+        renderAuthForm(formType);
+    });
+}
+
+function renderItemCard(container, item, type) {
+    const card = document.createElement('div');
+    card.className = 'item-card';
+    card.innerHTML = `
+        <h4>${item.itemName}</h4>
+        <p>By: ${item.userName}</p>
+    `;
+    card.onclick = () => renderDetailsModal(item, type);
+    container.appendChild(card);
+}
+
+function renderMapMarker(item, type) {
+    const lat = item.location?.lat || 12.9141 + (Math.random() - 0.5) * 0.05; // Fake location for demo
+    const lng = item.location?.lng || 79.1325 + (Math.random() - 0.5) * 0.05;
+    const marker = L.marker([lat, lng]).addTo(map);
+
+    let popupContent = `<b>${type === 'produce' ? 'Produce' : 'Request'}:</b> ${item.itemName}<br>By: ${item.userName}<br><button class="view-details-btn">View Details</button>`;
+    marker.bindPopup(popupContent);
+
+    // This is a bit tricky, we need to add the event listener AFTER the popup opens
+    marker.on('popupopen', () => {
+        document.querySelector('.view-details-btn').addEventListener('click', () => {
+             renderDetailsModal(item, type);
+        });
+    });
+}
+
+function renderDetailsModal(item, type) {
+    const otherUser = {
+        id: item.userId,
+        name: item.userName,
+        phone: item.userPhone
+    };
+    
+    modalContainer.innerHTML = `
+        <div class="modal-content">
+            <h2>${type === 'produce' ? 'Produce' : 'Request'} Details</h2>
+            <p><strong>Item:</strong> ${item.itemName}</p>
+            <p><strong>Posted by:</strong> ${item.userName}</p>
+            <div class="modal-buttons">
+                <button id="whatsapp-btn" class="button-primary">Chat on WhatsApp</button>
+                <button id="in-app-chat-btn" class="button-primary">Chat in App</button>
+                <button id="close-modal-btn" class="button-secondary">Close</button>
+            </div>
         </div>
     `;
-    document.getElementById('register-btn').addEventListener('click', handleRegister);
-    document.getElementById('show-login').addEventListener('click', renderLoginForm);
+    modalContainer.classList.remove('hidden');
+
+    document.getElementById('whatsapp-btn').onclick = () => {
+        window.open(`https://wa.me/${otherUser.phone}`, '_blank');
+    };
+    document.getElementById('in-app-chat-btn').onclick = () => {
+        modalContainer.classList.add('hidden');
+        renderChatUI(otherUser);
+    };
+    document.getElementById('close-modal-btn').onclick = () => {
+        modalContainer.classList.add('hidden');
+    };
 }
+
+function renderPostModal(type) {
+    const title = type === 'produce' ? 'Post New Produce' : 'Post New Request';
+    
+    modalContainer.innerHTML = `
+        <div class="modal-content">
+            <h2>${title}</h2>
+            <div class="auth-form">
+                <div class="input-group">
+                    <input type="text" id="item-name" placeholder="Item Name (e.g., Tomatoes)">
+                </div>
+                <div class="modal-buttons">
+                    <button id="post-item-btn" class="button-primary">Post</button>
+                    <button id="close-post-modal-btn" class="button-secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
+    `;
+    modalContainer.classList.remove('hidden');
+
+    document.getElementById('post-item-btn').onclick = () => handlePostItem(type);
+    document.getElementById('close-post-modal-btn').onclick = () => {
+        modalContainer.classList.add('hidden');
+    };
+}
+
+// --- ACTION HANDLERS (Login, Register, Post) ---
 
 async function handleLogin() {
     const email = document.getElementById('login-email').value;
@@ -83,185 +253,121 @@ async function handleLogin() {
     try {
         await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
-        alert("Error logging in: " + error.message);
+        alert("Login Error: " + error.message);
     }
 }
 
 async function handleRegister() {
-    const email = document.getElementById('register-email').value;
-    const password = document.getElementById('register-password').value;
     const name = document.getElementById('register-name').value;
     const phone = document.getElementById('register-phone').value;
+    const email = document.getElementById('register-email').value;
+    const password = document.getElementById('register-password').value;
     const role = document.getElementById('register-role').value;
+    
+    if (!name || !phone || !email || !password) {
+        alert("Please fill out all fields.");
+        return;
+    }
 
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
         
-        // Save user details to Firestore
         await setDoc(doc(db, "users", user.uid), {
             name: name,
             phone: phone,
             role: role,
             email: email
         });
-
     } catch (error) {
-        alert("Error registering: " + error.message);
+        alert("Registration Error: " + error.message);
     }
 }
 
-document.getElementById('logout-btn').addEventListener('click', () => signOut(auth));
-
-
-// --- APPLICATION INITIALIZATION ---
-function initializeApp() {
-    initMap();
-    setupDashboard();
-    listenForData();
-}
-
-function initMap() {
-    // This is a placeholder. A real app would get user's location.
-    map = L.map('map').setView([12.9141, 79.1325], 13); // Vellore
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-}
-
-function setupDashboard() {
-    const dashboard = document.querySelector('.dashboard');
-    if (currentUser.role === 'farmer') {
-        dashboard.innerHTML = `<h3>Your Requests</h3><div id="requests-list"></div>`;
-        document.getElementById('post-btn').textContent = "Post Produce";
-        document.getElementById('post-btn').onclick = renderPostProduceModal;
-    } else {
-        dashboard.innerHTML = `<h3>Available Produce</h3><div id="produce-list"></div>`;
-        document.getElementById('post-btn').textContent = "Post Request";
-        document.getElementById('post-btn').onclick = renderPostRequestModal;
+async function handlePostItem(type) {
+    const itemName = document.getElementById('item-name').value;
+    if (!itemName) {
+        alert("Please enter an item name.");
+        return;
     }
-}
 
-// --- REAL-TIME DATA LISTENING ---
-function listenForData() {
-    if (currentUser.role === 'farmer') {
-        // Farmer sees requests from owners
-        const q = query(collection(db, "requests"));
-        onSnapshot(q, (snapshot) => {
-            const requestsList = document.getElementById('requests-list');
-            requestsList.innerHTML = ''; // Clear old list
-            snapshot.forEach((doc) => {
-                const request = doc.data();
-                // Add marker to map
-                L.marker([12.9141, 79.1325]).addTo(map) // Placeholder location
-                    .bindPopup(`<b>Request:</b> ${request.item}<br>By: ${request.ownerName}`)
-                    .on('click', () => renderDetailsModal(request, 'request'));
-            });
+    const collectionName = type === 'produce' ? 'produce' : 'requests';
+    
+    try {
+        await addDoc(collection(db, collectionName), {
+            itemName: itemName,
+            userId: currentUser.uid,
+            userName: currentUser.name,
+            userPhone: currentUser.phone,
+            timestamp: serverTimestamp(),
+            location: { lat: 12.9141 + (Math.random() - 0.5) * 0.05, lng: 79.1325 + (Math.random() - 0.5) * 0.05 }
         });
-    } else {
-        // Owner sees produce from farmers
-        const q = query(collection(db, "produce"));
-        onSnapshot(q, (snapshot) => {
-            const produceList = document.getElementById('produce-list');
-            produceList.innerHTML = ''; // Clear old list
-            snapshot.forEach((doc) => {
-                const produce = doc.data();
-                 // Add marker to map
-                 L.marker([12.9141, 79.1325]).addTo(map) // Placeholder location
-                 .bindPopup(`<b>Produce:</b> ${produce.item}<br>By: ${produce.farmerName}`)
-                 .on('click', () => renderDetailsModal(produce, 'produce'));
-            });
-        });
+        modalContainer.classList.add('hidden');
+    } catch (error) {
+        alert("Error posting: " + error.message);
     }
 }
 
-// --- MODALS and UI ---
+// --- REAL-TIME CHAT UI AND LOGIC ---
 
-function renderDetailsModal(data, type) {
-    const modalContainer = document.getElementById('modal-container');
-    let detailsHtml = '';
-    let contactUser;
-
-    if (type === 'request') {
-        detailsHtml = `<h2>Request Details</h2><p>Item: ${data.item}</p><p>By: ${data.ownerName}</p>`;
-        contactUser = { id: data.ownerId, name: data.ownerName, phone: data.ownerPhone };
-    } else {
-        detailsHtml = `<h2>Produce Details</h2><p>Item: ${data.item}</p><p>By: ${data.farmerName}</p>`;
-        contactUser = { id: data.farmerId, name: data.farmerName, phone: data.farmerPhone };
-    }
-
-    modalContainer.innerHTML = `
-        <div class="modal-content">
-            ${detailsHtml}
-            <button id="whatsapp-btn">Chat on WhatsApp</button>
-            <button id="in-app-chat-btn">Chat in App</button>
-            <button id="close-modal-btn">Close</button>
-        </div>
-    `;
-    modalContainer.classList.remove('hidden');
-
-    document.getElementById('whatsapp-btn').onclick = () => {
-        window.open(`https://wa.me/${contactUser.phone}`, '_blank');
-    };
-    document.getElementById('in-app-chat-btn').onclick = () => {
-        modalContainer.classList.add('hidden');
-        startChat(contactUser);
-    };
-    document.getElementById('close-modal-btn').onclick = () => {
-        modalContainer.classList.add('hidden');
-    };
-}
-
-// --- CHAT FUNCTIONALITY ---
-
-function startChat(otherUser) {
+function renderChatUI(otherUser) {
     const chatContainer = document.getElementById('chat-container');
-    chatContainer.classList.remove('hidden');
     chatContainer.innerHTML = `
-        <div class="chat-header">Chat with ${otherUser.name}</div>
-        <div class="chat-messages" id="messages"></div>
+        <div class="chat-header">
+            <span>Chat with ${otherUser.name}</span>
+            <span class="close-chat" id="close-chat-btn">&times;</span>
+        </div>
+        <div class="chat-messages" id="messages-list"></div>
         <div class="chat-input">
             <input type="text" id="message-input" placeholder="Type a message...">
-            <button id="send-btn">Send</button>
+            <button id="send-message-btn">Send</button>
         </div>
     `;
-
+    chatContainer.classList.remove('hidden');
+    
+    const closeChatBtn = document.getElementById('close-chat-btn');
     const messageInput = document.getElementById('message-input');
-    const sendBtn = document.getElementById('send-btn');
-    const messagesDiv = document.getElementById('messages');
+    const sendBtn = document.getElementById('send-message-btn');
+    const messagesDiv = document.getElementById('messages-list');
 
-    // Create a unique chat room ID
+    // Create a unique, consistent chat room ID for these two users
     const chatRoomId = [currentUser.uid, otherUser.id].sort().join('_');
-    const chatRef = collection(db, "chats", chatRoomId, "messages");
-    const q = query(chatRef);
+    const messagesCollection = collection(db, "chats", chatRoomId, "messages");
+    const q = query(messagesCollection, orderBy("timestamp"));
 
-    // Listen for messages
-    onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
         messagesDiv.innerHTML = '';
         snapshot.forEach(doc => {
             const msg = doc.data();
-            const messageEl = document.createElement('div');
-            messageEl.textContent = msg.text;
-            messageEl.classList.add('message');
-            messageEl.classList.add(msg.senderId === currentUser.uid ? 'sent' : 'received');
-            messagesDiv.appendChild(messageEl);
+            const msgDiv = document.createElement('div');
+            msgDiv.textContent = msg.text;
+            msgDiv.className = `message ${msg.senderId === currentUser.uid ? 'sent' : 'received'}`;
+            messagesDiv.appendChild(msgDiv);
         });
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
     });
+    
+    const stopListening = () => {
+        unsubscribe();
+        chatContainer.classList.add('hidden');
+    };
+    closeChatBtn.onclick = stopListening;
 
-    // Send message
-    sendBtn.onclick = async () => {
-        if (messageInput.value.trim() === '') return;
+    const sendMessage = async () => {
+        const text = messageInput.value.trim();
+        if (text === '') return;
         
-        await addDoc(chatRef, {
-            text: messageInput.value,
+        await addDoc(messagesCollection, {
+            text: text,
             senderId: currentUser.uid,
             receiverId: otherUser.id,
             timestamp: serverTimestamp()
         });
         messageInput.value = '';
     };
-}
 
-// Initial load
-if (!currentUser) {
-    renderLoginForm();
+    sendBtn.onclick = sendMessage;
+    messageInput.onkeydown = (e) => {
+        if (e.key === 'Enter') sendMessage();
+    };
 }
