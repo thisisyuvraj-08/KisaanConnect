@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kisaan Connect</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div id="app" class="hidden">
+        <header>
+            <h1 class="logo">Kisaan Connect 🌱</h1>
+            <div class="user-menu">
+                <span id="user-display-name"></span>
+                <button id="logout-btn" class="button-secondary">Logout</button>
+            </div>
+        </header>
+        <main>
+            <div class="map-container"><div id="map"></div></div>
+            <div class="dashboard-container">
+                <div id="dashboard"></div>
+                <button id="post-btn" class="fab">+</button>
+            </div>
+        </main>
+    </div>
+
+    <div id="auth-container"></div>
+    <div id="chat-container" class="hidden"></div>
+    <div id="modal-container" class="hidden"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <script>
+        const firebaseConfig = {
+          apiKey: "AIzaSyDnhwxpN_6VXNY2rkfKJuA5XFmSERSOFsM",
+          authDomain: "kisaan-connect-da56d.firebaseapp.com",
+          projectId: "kisaan-connect-da56d",
+          storageBucket: "kisaan-connect-da56d.appspot.com",
+          messagingSenderId: "401721766160",
+          appId: "1:401721766160:web:29644ebd5bcc3116f07595",
+          measurementId: "G-9VQVCJYCWE"
+        };
+        firebase.initializeApp(firebaseConfig);
+    </script>
+    
+    <!-- Moved to the end of the body -->
+    <script src="app.js"></script>
+</body>
+</html>
