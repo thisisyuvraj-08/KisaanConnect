@@ -3,17 +3,11 @@
     --primary-light: #4caf50;
     --primary-dark: #1b5e20;
     --secondary-color: #ff9800;
-    --secondary-light: #ffb74d;
-    --secondary-dark: #f57c00;
     --background: #f8f9fa;
     --surface: #ffffff;
-    --error: #b00020;
-    --on-primary: #ffffff;
-    --on-secondary: #000000;
-    --on-background: #212121;
-    --on-surface: #212121;
-    --on-error: #ffffff;
     --border-color: #e0e0e0;
+    --on-primary: #ffffff;
+    --on-background: #212121;
     --shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
     --shadow-hover: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
@@ -46,6 +40,7 @@ main { display: flex; flex-grow: 1; overflow: hidden; border-radius: 0 0 16px 16
 
 .dashboard-container { flex: 2; display: flex; flex-direction: column; border-left: 1px solid var(--border-color); position: relative; background: var(--surface); }
 #dashboard { padding: 1.5rem; overflow-y: auto; flex-grow: 1; }
+#dashboard h2 { display: flex; align-items: center; gap: 10px; margin-bottom: 1rem; color: var(--primary-dark); }
 
 .fab { position: absolute; bottom: 20px; right: 20px; width: 60px; height: 60px; background: linear-gradient(135deg, var(--secondary-color), var(--secondary-dark)); color: var(--on-primary); border: none; border-radius: 50%; font-size: 1.8rem; line-height: 60px; text-align: center; box-shadow: var(--shadow); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; z-index: 10; }
 .fab:hover { transform: scale(1.1); box-shadow: var(--shadow-hover); }
