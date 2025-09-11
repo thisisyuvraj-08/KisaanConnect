@@ -5,9 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kisaan Connect</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Leaflet CSS for the map -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -44,7 +42,7 @@
         <!-- The real-time chat UI will be injected here by JavaScript -->
     </div>
 
-    <!-- This container is for all pop-up modals (e.g., posting produce, viewing details) -->
+    <!-- This container is for all pop-up modals -->
     <div id="modal-container" class="hidden">
          <!-- Modals will be dynamically injected here by JavaScript -->
     </div>
@@ -52,14 +50,13 @@
     <!-- External Libraries -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
-    <!-- Firebase SDK Scripts -->
-    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-firestore.js"></script>
+    <!-- IMPORTANT: Using Firebase v8 "compat" scripts to avoid module issues -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 
     <!-- Firebase Initialization -->
     <script>
-        // Your provided Firebase configuration
         const firebaseConfig = {
           apiKey: "AIzaSyDnhwxpN_6VXNY2rkfKJuA5XFmSERSOFsM",
           authDomain: "kisaan-connect-da56d.firebaseapp.com",
@@ -71,10 +68,10 @@
         };
 
         // Initialize Firebase
-        const app = firebase.initializeApp(firebaseConfig);
+        firebase.initializeApp(firebaseConfig);
     </script>
 
-    <!-- Your Application Logic -->
-    <script type="module" src="app.js"></script>
+    <!-- Your Application Logic (NO type="module") -->
+    <script src="app.js"></script>
 </body>
 </html>
