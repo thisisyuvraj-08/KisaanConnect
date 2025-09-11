@@ -1,4 +1,4 @@
-# 🌾 Kisaan Connect
+# 🌾 Kisaan Connect (https://thisisyuvraj-08.github.io/KisaanConnect/)
 
 **A modern web platform connecting local farmers directly with kirana stores**
 
