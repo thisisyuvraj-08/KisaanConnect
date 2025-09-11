@@ -189,27 +189,31 @@ function setupMap() {
   markersLayer = L.layerGroup().addTo(map);
 }
 
-// Dashboard Tabs
+// Dashboard Tabs, including Chats for both
 function setupDashboardTabs() {
   if (userData.role === 'farmer') {
     dashboardPanel.innerHTML = `
       <div class="dashboard-tabs">
         <button class="tab-btn active" id="tab-market">Marketplace</button>
         <button class="tab-btn" id="tab-myposts">My Posts</button>
+        <button class="tab-btn" id="tab-chats">Chats</button>
       </div>
       <div id="tab-content"></div>
     `;
     $('#tab-market').onclick = () => activateTab('market');
     $('#tab-myposts').onclick = () => activateTab('myposts');
+    $('#tab-chats').onclick = () => activateTab('chats');
     activateTab('market');
   } else {
     dashboardPanel.innerHTML = `
       <div class="dashboard-tabs">
         <button class="tab-btn active" id="tab-market">Marketplace</button>
+        <button class="tab-btn" id="tab-chats">Chats</button>
       </div>
       <div id="tab-content"></div>
     `;
     $('#tab-market').onclick = () => activateTab('market');
+    $('#tab-chats').onclick = () => activateTab('chats');
     activateTab('market');
   }
 }
@@ -223,6 +227,9 @@ function activateTab(tab) {
   } else if (tab === 'myposts') {
     $('#tab-myposts').classList.add('active');
     setupMyPosts();
+  } else if (tab === 'chats') {
+    $('#tab-chats').classList.add('active');
+    setupChatsList();
   }
 }
 
@@ -283,10 +290,10 @@ function renderDashboard(items, type) {
   });
 }
 
-// MY POSTS
+// MY POSTS with Edit/Delete
 function setupMyPosts() {
   if (unsubscribeMyPosts) unsubscribeMyPosts();
-  let col = 'produce';
+  let col = userData.role === 'farmer' ? 'produce' : 'requests';
   unsubscribeMyPosts = db.collection(col)
     .where('userId', '==', currentUser.uid)
     .orderBy('timestamp', 'desc')
@@ -314,6 +321,7 @@ function renderMyPosts(items, type) {
             <span>Posted: ${formatTime(item.timestamp)}</span>
             <span class="myposts-tag">${type === 'produce' ? 'Produce' : 'Request'}</span>
           </div>
+          <button class="myposts-edit-btn" title="Edit">&#9998;</button>
           <button class="myposts-delete-btn" title="Delete">&#128465;</button>
         </li>
       `).join('') +
@@ -324,22 +332,43 @@ function renderMyPosts(items, type) {
     btn.onclick = e => {
       e.stopPropagation();
       const id = btn.closest('.myposts-item').dataset.id;
-      let col = 'produce';
+      let col = userData.role === 'farmer' ? 'produce' : 'requests';
       if (confirm('Delete this post?')) {
         db.collection(col).doc(id).delete();
         showSnackbar("Deleted!");
       }
     }
   });
+  $$('.myposts-edit-btn').forEach((btn, i) => {
+    btn.onclick = e => {
+      e.stopPropagation();
+      const id = btn.closest('.myposts-item').dataset.id;
+      let col = userData.role === 'farmer' ? 'produce' : 'requests';
+      db.collection(col).doc(id).get().then(doc => {
+        if (doc.exists) {
+          if (col === 'produce') openPostProduceModal({ id, ...doc.data() });
+          else openPostRequestModal({ id, ...doc.data() });
+        }
+      });
+    }
+  });
 }
 
-// Map Markers
+// Map Markers: support multiple posts at same location
 function updateMapMarkers(items, type) {
   if (!markersLayer) return;
   markersLayer.clearLayers();
+  // Group items by lat,lng
+  const locMap = {};
   items.forEach(item => {
     if (!item.location || !item.location.lat || !item.location.lng) return;
-    const marker = L.marker([item.location.lat, item.location.lng], {
+    const key = item.location.lat.toFixed(6) + ',' + item.location.lng.toFixed(6);
+    if (!locMap[key]) locMap[key] = [];
+    locMap[key].push(item);
+  });
+  Object.entries(locMap).forEach(([key, arr]) => {
+    const [lat, lng] = key.split(',').map(Number);
+    const marker = L.marker([lat, lng], {
       icon: L.icon({
         iconUrl: type === 'produce'
           ? 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/icons/basket.svg'
@@ -347,8 +376,31 @@ function updateMapMarkers(items, type) {
         iconSize: [30, 30]
       })
     });
-    marker.bindTooltip(`${escapeHTML(item.itemName)}<br>${escapeHTML(item.userName)}`);
-    marker.on('click', () => openDetailsModal(item, type));
+    marker.bindTooltip(arr.map(a => escapeHTML(a.itemName)).join(', '));
+    marker.on('click', () => {
+      // Show list modal if multiple at this spot
+      if (arr.length === 1) openDetailsModal(arr[0], type);
+      else {
+        detailsModal.innerHTML = `
+          <div class="modal-content">
+            <button class="modal-close" title="Close">&times;</button>
+            <div class="modal-header">Posts at this location</div>
+            <ul>
+              ${arr.map((item, idx) => `
+                <li>
+                  <button class="btn" style="margin-bottom:4px;" data-idx="${idx}">${escapeHTML(item.itemName)} (${escapeHTML(item.quantity)}kg${item.price ? ', ₹'+escapeHTML(item.price)+'/kg' : ''})</button>
+                </li>
+              `).join('')}
+            </ul>
+          </div>
+        `;
+        show(detailsModal);
+        arr.forEach((item, idx) => {
+          detailsModal.querySelector(`button[data-idx="${idx}"]`).onclick = () => openDetailsModal(item, type);
+        });
+        $$('.modal-close').forEach(el => { el.onclick = closeModal; });
+      }
+    });
     markersLayer.addLayer(marker);
   });
 }
@@ -363,7 +415,7 @@ function setupFAB() {
   fab.classList.remove('hidden');
 }
 
-// Details Modal
+// Details Modal (unchanged, except supports opening chat)
 function openDetailsModal(item, type) {
   if (!item) return;
   detailsModal.innerHTML = `
@@ -402,35 +454,45 @@ function closeModal() {
   hide(detailsModal);
 }
 
-// Post Produce (Farmer)
-function openPostProduceModal() {
+// Post Produce (Farmer) with edit/delete
+function openPostProduceModal(editPost = null) {
   detailsModal.innerHTML = `
     <div class="modal-content">
       <button class="modal-close" title="Close">&times;</button>
-      <div class="modal-header">Post Produce</div>
+      <div class="modal-header">${editPost ? 'Edit Produce' : 'Post Produce'}</div>
       <form id="produce-form">
         <label>Item Name</label>
-        <input type="text" id="produce-item" required autocomplete="off">
+        <input type="text" id="produce-item" required autocomplete="off" value="${editPost ? escapeHTML(editPost.itemName) : ''}">
         <label>Quantity (kg)</label>
-        <input type="number" id="produce-qty" min="1" required>
+        <input type="number" id="produce-qty" min="1" required value="${editPost ? escapeHTML(editPost.quantity) : ''}">
         <label>Price (per kg, ₹)</label>
-        <input type="number" id="produce-price" min="1" required>
+        <input type="number" id="produce-price" min="1" required value="${editPost ? escapeHTML(editPost.price) : ''}">
         <div style="margin:10px 0;display:flex;align-items:center;gap:12px;">
           <button type="button" class="voice-mic-btn" id="produce-mic" title="Voice Input">
             <span id="mic-icn">&#127908;</span>
           </button>
-          <select id="produce-lang" style="padding:4px 8px;font-size:1rem;border-radius:12px;">
-            <option value="en-IN">English</option>
-            <option value="hi-IN">हिंदी</option>
-          </select>
           <span id="mic-status" style="font-size:0.97rem;color:#2782f9"></span>
         </div>
-        <button class="btn" type="submit" style="width:100%;margin-top:10px;">Post</button>
+        <button class="btn" type="submit" style="width:100%;margin-top:10px;">${editPost ? 'Save' : 'Post'}</button>
+        ${editPost ? `<button type="button" class="btn btn-danger" id="delete-post" style="width:100%;margin-top:10px;">Delete</button>` : ''}
       </form>
     </div>
   `;
   show(detailsModal);
   setupProduceVoiceInput();
+
+  // Edit/Delete logic
+  if (editPost) {
+    $('#delete-post').onclick = async () => {
+      if (confirm('Delete this post?')) {
+        await db.collection('produce').doc(editPost.id).delete();
+        closeModal();
+        showSnackbar("Deleted!");
+        if (isMyPostsActive) setupMyPosts();
+      }
+    };
+  }
+
   $('#produce-form').onsubmit = async e => {
     e.preventDefault();
     const itemName = $('#produce-item').value.trim();
@@ -446,48 +508,67 @@ function openPostProduceModal() {
     let loc = null;
     try { loc = await getUserLocation(); } catch {}
     try {
-      await db.collection('produce').add({
-        itemName, quantity, price,
-        userId: currentUser.uid,
-        userName: userData.name,
-        userPhone: userData.phone,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        location: loc
-      });
+      if (editPost) {
+        await db.collection('produce').doc(editPost.id).update({
+          itemName, quantity, price, location: loc
+        });
+        showSnackbar("Updated!");
+      } else {
+        await db.collection('produce').add({
+          itemName, quantity, price,
+          userId: currentUser.uid,
+          userName: userData.name,
+          userPhone: userData.phone,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          location: loc
+        });
+        showSnackbar("Posted successfully!");
+      }
       closeModal();
-      showSnackbar("Posted successfully!");
       if (isMyPostsActive) setupMyPosts();
     } catch (err) {
-      showSnackbar("Error posting: " + err.message);
+      showSnackbar("Error: " + err.message);
       submitBtn.disabled = false;
     }
   };
   $$('.modal-close').forEach(el => { el.onclick = closeModal; });
 }
 
-// Post Request (Shop Owner)
-function openPostRequestModal() {
+// Post Request (Shop Owner) with edit/delete
+function openPostRequestModal(editPost = null) {
   detailsModal.innerHTML = `
     <div class="modal-content">
       <button class="modal-close" title="Close">&times;</button>
-      <div class="modal-header">Post Request</div>
+      <div class="modal-header">${editPost ? 'Edit Request' : 'Post Request'}</div>
       <form id="request-form">
         <label>Item Name</label>
-        <input type="text" id="request-item" required autocomplete="off">
+        <input type="text" id="request-item" required autocomplete="off" value="${editPost ? escapeHTML(editPost.itemName) : ''}">
         <label>Quantity (kg)</label>
-        <input type="number" id="request-qty" min="1" required>
+        <input type="number" id="request-qty" min="1" required value="${editPost ? escapeHTML(editPost.quantity) : ''}">
         <div style="margin:10px 0;">
           <button type="button" class="voice-mic-btn" id="request-mic" title="Voice Input">
             <span id="mic-icn">&#127908;</span>
           </button>
           <span id="mic-status" style="font-size:0.97rem;color:#2782f9"></span>
         </div>
-        <button class="btn" style="width:100%;margin-top:10px;">Post</button>
+        <button class="btn" type="submit" style="width:100%;margin-top:10px;">${editPost ? 'Save' : 'Post'}</button>
+        ${editPost ? `<button type="button" class="btn btn-danger" id="delete-post" style="width:100%;margin-top:10px;">Delete</button>` : ''}
       </form>
     </div>
   `;
   show(detailsModal);
   setupRequestVoiceInput();
+
+  if (editPost) {
+    $('#delete-post').onclick = async () => {
+      if (confirm('Delete this request?')) {
+        await db.collection('requests').doc(editPost.id).delete();
+        closeModal();
+        showSnackbar("Deleted!");
+      }
+    };
+  }
+
   $('#request-form').onsubmit = async e => {
     e.preventDefault();
     const itemName = $('#request-item').value.trim();
@@ -502,18 +583,25 @@ function openPostRequestModal() {
     let loc = null;
     try { loc = await getUserLocation(); } catch {}
     try {
-      await db.collection('requests').add({
-        itemName, quantity,
-        userId: currentUser.uid,
-        userName: userData.name,
-        userPhone: userData.phone,
-        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        location: loc
-      });
+      if (editPost) {
+        await db.collection('requests').doc(editPost.id).update({
+          itemName, quantity, location: loc
+        });
+        showSnackbar("Updated!");
+      } else {
+        await db.collection('requests').add({
+          itemName, quantity,
+          userId: currentUser.uid,
+          userName: userData.name,
+          userPhone: userData.phone,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          location: loc
+        });
+        showSnackbar("Request posted!");
+      }
       closeModal();
-      showSnackbar("Request posted!");
     } catch (err) {
-      showSnackbar("Error posting: " + err.message);
+      showSnackbar("Error: " + err.message);
       submitBtn.disabled = false;
     }
   };
@@ -531,53 +619,10 @@ function getUserLocation() {
   });
 }
 
-// Voice to form (with Hindi support)
+// Voice to form: auto language detection (en-IN, fallback hi-IN)
 function setupProduceVoiceInput() {
-  const langSelector = $('#produce-lang');
-  let lang = langSelector ? langSelector.value : 'en-IN';
-  langSelector && (langSelector.onchange = () => {
-    $('#mic-status').textContent = '';
-    lang = langSelector.value;
-  });
-  setupVoiceInput(
-    $('#produce-mic'), $('#mic-status'),
-    async (transcript, usedLang) => {
-      const intent = await getIntentFromVoiceCommand(transcript, usedLang || lang);
-      if (intent.item) $('#produce-item').value = intent.item;
-      if (intent.quantity) $('#produce-qty').value = intent.quantity;
-      if (intent.price) $('#produce-price').value = intent.price;
-      if (!intent.quantity) {
-        $('#mic-status').textContent = usedLang === 'hi-IN'
-          ? 'कृपया मात्रा बोलें (जैसे, "40 किलो")...'
-          : 'Please speak quantity (e.g., "40 kilo")...';
-        listenOnce(usedLang || lang, result => {
-          const qty = (result.match(/\d+/) || [])[0];
-          if (qty) $('#produce-qty').value = qty;
-          $('#mic-status').textContent = '';
-        });
-      }
-    }, lang
-  );
-}
-function setupRequestVoiceInput() {
-  setupVoiceInput(
-    $('#request-mic'), $('#mic-status'),
-    async (transcript, usedLang) => {
-      const intent = await getIntentFromVoiceCommand(transcript, usedLang || 'en-IN');
-      if (intent.item) $('#request-item').value = intent.item;
-      if (intent.quantity) $('#request-qty').value = intent.quantity;
-      if (!intent.quantity) {
-        $('#mic-status').textContent = 'Please speak quantity (e.g., "40 kilo")...';
-        listenOnce(usedLang || 'en-IN', result => {
-          const qty = (result.match(/\d+/) || [])[0];
-          if (qty) $('#request-qty').value = qty;
-          $('#mic-status').textContent = '';
-        });
-      }
-    }
-  );
-}
-function setupVoiceInput(micBtn, statusEl, callback, lang = 'en-IN') {
+  const micBtn = $('#produce-mic');
+  const statusEl = $('#mic-status');
   let recognizing = false;
   let recognition;
   micBtn.onclick = () => {
@@ -589,31 +634,118 @@ function setupVoiceInput(micBtn, statusEl, callback, lang = 'en-IN') {
       statusEl.textContent = "Voice not supported";
       return;
     }
-    recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = lang;
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognizing = true;
-    micBtn.classList.add('active');
     statusEl.textContent = "Listening...";
-    recognition.onresult = e => {
-      recognizing = false;
-      micBtn.classList.remove('active');
-      statusEl.textContent = '';
-      const transcript = e.results[0][0].transcript;
-      callback(transcript, lang);
-    };
-    recognition.onerror = e => {
-      recognizing = false;
-      micBtn.classList.remove('active');
-      statusEl.textContent = "Didn't catch that. Try again.";
-    };
-    recognition.onend = () => {
-      recognizing = false;
-      micBtn.classList.remove('active');
-      statusEl.textContent = '';
-    };
-    recognition.start();
+    let triedHindi = false;
+    function startRecognition(lang) {
+      recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      recognition.lang = lang;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      recognizing = true;
+      micBtn.classList.add('active');
+      recognition.onresult = e => {
+        recognizing = false;
+        micBtn.classList.remove('active');
+        statusEl.textContent = '';
+        const transcript = e.results[0][0].transcript;
+        getIntentFromVoiceCommand(transcript, lang).then(intent => {
+          // If price not recognized, try Hindi fallback
+          if (!intent.price && !triedHindi && lang === 'en-IN') {
+            triedHindi = true;
+            startRecognition('hi-IN');
+            return;
+          }
+          if (intent.item) $('#produce-item').value = intent.item;
+          if (intent.quantity) $('#produce-qty').value = intent.quantity;
+          if (intent.price) $('#produce-price').value = intent.price;
+          if (!intent.quantity) {
+            statusEl.textContent = lang === 'hi-IN'
+              ? 'कृपया मात्रा बोलें (जैसे, "40 किलो")...'
+              : 'Please speak quantity (e.g., "40 kilo")...';
+            listenOnce(lang, result => {
+              const qty = (result.match(/\d+/) || [])[0];
+              if (qty) $('#produce-qty').value = qty;
+              statusEl.textContent = '';
+            });
+          }
+        });
+      };
+      recognition.onerror = e => {
+        recognizing = false;
+        micBtn.classList.remove('active');
+        statusEl.textContent = "Didn't catch that. Try again.";
+      };
+      recognition.onend = () => {
+        recognizing = false;
+        micBtn.classList.remove('active');
+        if (statusEl.textContent === "Listening...") statusEl.textContent = '';
+      };
+      recognition.start();
+    }
+    startRecognition('en-IN');
+  };
+}
+function setupRequestVoiceInput() {
+  const micBtn = $('#request-mic');
+  const statusEl = $('#mic-status');
+  let recognizing = false;
+  let recognition;
+  micBtn.onclick = () => {
+    if (recognizing) {
+      recognition.stop();
+      return;
+    }
+    if (!window.SpeechRecognition && !window.webkitSpeechRecognition) {
+      statusEl.textContent = "Voice not supported";
+      return;
+    }
+    statusEl.textContent = "Listening...";
+    let triedHindi = false;
+    function startRecognition(lang) {
+      recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      recognition.lang = lang;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      recognizing = true;
+      micBtn.classList.add('active');
+      recognition.onresult = e => {
+        recognizing = false;
+        micBtn.classList.remove('active');
+        statusEl.textContent = '';
+        const transcript = e.results[0][0].transcript;
+        getIntentFromVoiceCommand(transcript, lang).then(intent => {
+          if (!intent.quantity && !triedHindi && lang === 'en-IN') {
+            triedHindi = true;
+            startRecognition('hi-IN');
+            return;
+          }
+          if (intent.item) $('#request-item').value = intent.item;
+          if (intent.quantity) $('#request-qty').value = intent.quantity;
+          if (!intent.quantity) {
+            statusEl.textContent = lang === 'hi-IN'
+              ? 'कृपया मात्रा बोलें (जैसे, "40 किलो")...'
+              : 'Please speak quantity (e.g., "40 kilo")...';
+            listenOnce(lang, result => {
+              const qty = (result.match(/\d+/) || [])[0];
+              if (qty) $('#request-qty').value = qty;
+              statusEl.textContent = '';
+            });
+          }
+        });
+      };
+      recognition.onerror = e => {
+        recognizing = false;
+        micBtn.classList.remove('active');
+        statusEl.textContent = "Didn't catch that. Try again.";
+      };
+      recognition.onend = () => {
+        recognizing = false;
+        micBtn.classList.remove('active');
+        if (statusEl.textContent === "Listening...") statusEl.textContent = '';
+      };
+      recognition.start();
+    }
+    startRecognition('en-IN');
   };
 }
 function listenOnce(lang, cb) {
@@ -628,30 +760,46 @@ async function getIntentFromVoiceCommand(text, lang = 'en-IN') {
   let item = '';
   let quantity = '';
   let price = '';
+
   let lower = text.toLowerCase();
 
-  // Hindi support regexes
+  // Hindi and English price patterns
+  // e.g. "कीमत 80", "price 80", "80 रुपये किलो", "80 per kg", "80 rs", "price per kg 80", "प्राइस अस्सी"
+  let priceMatch = lower.match(/(?:rs|₹|rupees?|price|प्राइस|कीमत|भाव|दर|per|प्रति|पर)\s*:?\.?\s*([\d]+(\.\d+)?)/)
+    || lower.match(/([\d]+(\.\d+)?)\s*(rs|₹|रुपये|रुपया|rupees?|price|प्राइस|कीमत|भाव|दर|पर|प्रति|per)/i);
+
+  // Hindi number words e.g. "अस्सी" (80), "सौ" (100)
+  if (!priceMatch) {
+    // Try to convert Hindi number words to actual number
+    const hindiNumbers = { 'शून्य':0,'एक':1,'दो':2,'तीन':3,'चार':4,'पांच':5,'छह':6,'सात':7,'आठ':8,'नौ':9,'दस':10,'बीस':20,'तीस':30,'चालीस':40,'पचास':50,'साठ':60,'सत्तर':70,'अस्सी':80,'नब्बे':90,'सौ':100 };
+    for (const [word, num] of Object.entries(hindiNumbers)) {
+      if (lower.includes(word)) {
+        // Check if price context word is near
+        let context = /(कीमत|प्राइस|भाव|दर|पर|प्रति)/;
+        if (context.test(lower)) {
+          price = num;
+          break;
+        }
+      }
+    }
+  }
+  if (priceMatch && priceMatch[1]) price = priceMatch[1];
+
+  // Quantity (Hindi/English)
   let qtyMatch = lower.match(/(\d+(\.\d+)?)\s*(kg|kilo|kilogram|किलो|किलोग्राम)?/);
   if (qtyMatch && qtyMatch[1]) quantity = qtyMatch[1];
 
-  // English and Hindi for price
-  let priceMatch = lower.match(/(?:rs|₹|rupees?|price|पर|प्रति|कीमत|price|price per|प्राइस)\s*(\d+(\.\d+)?)/)
-    || lower.match(/(\d+(\.\d+)?)\s*(rs|₹|rupees?|price|per|प्रति|कीमत|प्राइस)/i);
-  if (priceMatch && priceMatch[1]) price = priceMatch[1];
-
-  // Try to extract item name (English or Hindi), expand with more items as needed
+  // Known items
   let knownItems = [
     // English
     'tomato', 'onion', 'potato', 'cabbage', 'carrot', 'chili', 'cauliflower', 'beans', 'peas', 'brinjal', 'apple', 'banana', 'mango', 'pomegranate', 'orange', 'lemon', 'ladyfinger', 'cucumber', 'radish', 'spinach',
     // Hindi
     'टमाटर', 'प्याज', 'आलू', 'पत्ता गोभी', 'गाजर', 'मिर्च', 'फूलगोभी', 'फलियां', 'मटर', 'बैंगन', 'सेब', 'केला', 'आम', 'अनार', 'संतरा', 'नींबू', 'भिंडी', 'खीरा', 'मूली', 'पालक'
   ];
-
   for (const it of knownItems) {
     if (lower.includes(it)) item = it;
   }
-
-  // Fallback to previous logic
+  // Fallbacks
   if (!item) {
     let m = lower.match(/(?:kg|kilo|kilogram|किलो|किलोग्राम)\s+(\w+)/);
     if (m) item = m[1];
@@ -662,6 +810,54 @@ async function getIntentFromVoiceCommand(text, lang = 'en-IN') {
   if (item) item = item.charAt(0).toUpperCase() + item.slice(1);
 
   return { item, quantity, price };
+}
+
+// ===== CHAT 2-way: Farmer and Owner both get tabs =====
+function setupChatsList() {
+  // Find all chat rooms where currentUser is a participant
+  db.collection('chats').get().then(snap => {
+    const myRooms = [];
+    snap.forEach(doc => {
+      if (doc.id.includes(currentUser.uid)) myRooms.push(doc.id);
+    });
+    if (!myRooms.length) {
+      $('#tab-content').innerHTML = `<div class="empty-state">No chats yet.</div>`;
+      return;
+    }
+    let html = `<ul class="myposts-list">`;
+    let promises = myRooms.map(roomId => {
+      // Split to get other id
+      let ids = roomId.split('_');
+      let otherId = ids[0] === currentUser.uid ? ids[1] : ids[0];
+      return db.collection('users').doc(otherId).get().then(userdoc => {
+        return db.collection('chats').doc(roomId).collection('messages').orderBy('timestamp', 'desc').limit(1).get()
+        .then(msgsnap => {
+          let lastMsg = msgsnap.docs.length ? msgsnap.docs[0].data().text : '';
+          let name = userdoc.exists ? userdoc.data().name : 'User';
+          html += `<li class="myposts-item" style="cursor:pointer" data-id="${roomId}">
+            <div class="myposts-title">${escapeHTML(name)}</div>
+            <div class="myposts-meta">${escapeHTML(lastMsg || "No messages yet")}</div>
+          </li>`;
+        });
+      });
+    });
+    Promise.all(promises).then(() => {
+      html += '</ul>';
+      $('#tab-content').innerHTML = html;
+      $$('.myposts-item').forEach(el => {
+        el.onclick = () => {
+          let rid = el.dataset.id;
+          let ids = rid.split('_');
+          let otherId = ids[0] === currentUser.uid ? ids[1] : ids[0];
+          db.collection('users').doc(otherId).get().then(doc => {
+            let name = doc.exists ? doc.data().name : 'User';
+            let phone = doc.exists ? doc.data().phone : '';
+            openChatWindow(otherId, name, phone);
+          });
+        }
+      });
+    });
+  });
 }
 
 // Chat
