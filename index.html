@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kisaan Connect - Farmer & Kirana Owner Marketplace</title>
+    <title>Kisaan Connect</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
+
+    <!-- Main Application Container (hidden by default) -->
     <div id="app" class="hidden">
         <header>
             <h1 class="logo"><i class="fas fa-leaf"></i> Kisaan Connect</h1>
@@ -24,25 +27,34 @@
             </div>
             <div class="dashboard-container">
                 <div id="dashboard">
+                    <!-- Dashboard content will be dynamically loaded here -->
                     <div class="spinner"></div>
                 </div>
-                <button id="post-btn" class="fab">+</button>
+                <button id="post-btn" class="fab" title="Post Item">+</button>
             </div>
         </main>
     </div>
 
+    <!-- Auth Container (shown by default) -->
     <div id="auth-container">
         <div class="spinner"></div>
     </div>
     
+    <!-- Chat Container (hidden by default) -->
     <div id="chat-container" class="hidden"></div>
+
+    <!-- Modal Container (hidden by default) -->
     <div id="modal-container" class="hidden"></div>
 
+    <!-- External Libraries -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Firebase SDKs (using the compatible v8 for simplicity with your setup) -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     
+    <!-- Your Application Logic (loaded last) -->
     <script src="app.js"></script>
 </body>
 </html>
