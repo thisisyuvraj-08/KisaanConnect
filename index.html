@@ -72,22 +72,19 @@
     </div>
   </div>
 
-  <!-- Details modal & chat window templates are dynamically injected -->
-
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <!-- Firebase App (the core Firebase SDK) -->
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-  <!-- Firebase Compat (v8) SDKs above -->
   <script>
     // For Firebase JS SDK v7.20.0 and later, measurementId is optional
     const firebaseConfig = {
       apiKey: "AIzaSyDnhwxpN_6VXNY2rkfKJuA5XFmSERSOFsM",
       authDomain: "kisaan-connect-da56d.firebaseapp.com",
       projectId: "kisaan-connect-da56d",
-      storageBucket: "kisaan-connect-da56d.firebasestorage.app",
+      storageBucket: "kisaan-connect-da56d.appspot.com",
       messagingSenderId: "401721766160",
       appId: "1:401721766160:web:29644ebd5bcc3116f07595",
       measurementId: "G-9VQVCJYCWE"
@@ -96,7 +93,6 @@
   </script>
   <script src="app.js"></script>
   <script>
-    // Register service worker for PWA
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('service-worker.js');
@@ -105,4 +101,3 @@
   </script>
 </body>
 </html>
-
