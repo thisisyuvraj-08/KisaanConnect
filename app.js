@@ -1,30 +1,24 @@
-// Kisaan Connect - app.js (improved, bugfixed, all features!)
+// Kisaan Connect - Full app.js with real-time chat (farmer/owner), voice language detection, edit/delete/expiration, UI polish
 
-// --- GLOBAL STATE ---
 let currentUser = null;
 let userData = null;
 let map = null;
 let userMarker = null;
 let markersGroup = null;
-let myLocation = null; // {lat, lng}
+let myLocation = null;
 let produceUnsub = null, requestsUnsub = null;
-let marketplaceItems = []; // items shown in dashboard/map
-let myPosts = []; // user's own produce or requests
-let currentDashboardTab = 'marketplace'; // or 'my-posts'
+let marketplaceItems = [];
+let myPosts = [];
+let currentDashboardTab = 'marketplace';
 let chatUnsub = null;
 let activeChatRoomId = null;
 let activeChatOtherUser = null;
-let postEditId = null; // editing post id
+let postEditId = null;
 
-// --- FIREBASE REFS ---
-const auth = firebase.auth();
-const db = firebase.firestore();
-
-// --- DOM ELEMENTS ---
+// DOM
 const $ = s => document.querySelector(s);
-const $$ = s => document.querySelectorAll(s);
 
-// Auth
+// --- AUTH SELECTORS ---
 const authSection = $('#auth-section');
 const loginForm = $('#login-form');
 const registerForm = $('#register-form');
@@ -32,19 +26,19 @@ const toggleAuth = $('#toggle-auth');
 const authTitle = $('#auth-title');
 const authError = $('#auth-error');
 
-// Header & Main UI
+// --- MAIN UI ---
 const mainHeader = $('#main-header');
 const userNameSpan = $('#user-name');
 const logoutBtn = $('#logout-btn');
 const appMain = $('#app-main');
 const fab = $('#fab');
 
-// Map & Dashboard
+// --- DASHBOARD ---
 const dashboardList = $('#dashboard-list');
 const marketplaceTab = $('#marketplace-tab');
 const myPostsTab = $('#my-posts-tab');
 
-// Modals
+// --- POST MODAL ---
 const postModal = $('#post-modal');
 const postModalTitle = $('#post-modal-title');
 const closePostModalBtn = $('#close-post-modal');
@@ -54,14 +48,12 @@ const quantityInput = $('#quantity');
 const unitSelect = $('#unit');
 const priceInput = $('#price');
 const priceUnitSelect = $('#price-unit');
+const expirationInput = $('#expiration');
 const voiceBtn = $('#voice-btn');
 const voiceStatus = $('#voice-status');
 const postError = $('#post-error');
 
-// Expiration field (created dynamically in showPostModalEdit if not present)
-let expirationInput = null;
-
-// Details Modal
+// --- DETAILS MODAL ---
 const detailsModal = $('#details-modal');
 const closeDetailsModalBtn = $('#close-details-modal');
 const closeDetailsBtn = $('#close-details-btn');
@@ -70,7 +62,7 @@ const detailsInfo = $('#details-info');
 const whatsappBtn = $('#whatsapp-btn');
 const inappChatBtn = $('#inapp-chat-btn');
 
-// Chat
+// --- CHAT ---
 const chatWindow = $('#chat-window');
 const chatUserName = $('#chat-user-name');
 const closeChatWindowBtn = $('#close-chat-window');
@@ -80,10 +72,9 @@ const chatInput = $('#chat-input');
 const chatSendBtn = $('#chat-send-btn');
 const chatVoiceBtn = $('#chat-voice-btn');
 
-// Loader
+// --- LOADER ---
 const loader = $('#loader');
 
-// --- UTILS ---
 function showLoader(show = true) {
   loader.classList.toggle('hidden', !show);
 }
@@ -105,7 +96,6 @@ function formatDateOnly(ts) {
   return d.toLocaleDateString('en-CA');
 }
 function haversineDist(lat1, lng1, lat2, lng2) {
-  // Returns distance in km
   const toRad = d => d * Math.PI / 180;
   let R = 6371;
   let dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
@@ -113,7 +103,6 @@ function haversineDist(lat1, lng1, lat2, lng2) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 function getChatRoomId(uid1, uid2, refId) {
-  // refId is produce/request docId
   return [uid1, uid2].sort().join('_') + '_' + refId;
 }
 function isExpired(expiry) {
@@ -124,17 +113,18 @@ function isExpired(expiry) {
 }
 
 // --- AUTH LOGIC ---
+const auth = firebase.auth();
+const db = firebase.firestore();
+
 auth.onAuthStateChanged(async user => {
   if (user) {
     currentUser = user;
     showLoader(true);
-    // Fetch user data
     let u = await db.collection('users').doc(user.uid).get();
     if (u.exists) {
       userData = u.data();
       initApp();
     } else {
-      // Should not happen, but edge case
       auth.signOut();
       showLoader(false);
     }
@@ -145,7 +135,6 @@ auth.onAuthStateChanged(async user => {
   }
 });
 
-// --- AUTH UI ---
 function showAuth() {
   showLoader(false);
   mainHeader.classList.add('hidden');
@@ -175,7 +164,6 @@ function showAuth() {
   };
 }
 
-// --- LOGIN/REGISTER EVENTS ---
 loginForm.onsubmit = async e => {
   e.preventDefault();
   showLoader(true);
@@ -208,15 +196,11 @@ registerForm.onsubmit = async e => {
     showLoader(false);
   }
 };
-
-// --- LOGOUT ---
 logoutBtn.onclick = () => {
   auth.signOut();
 };
 
-// --- INIT MAIN APP ---
 async function initApp() {
-  // UI
   showLoader(false);
   mainHeader.classList.remove('hidden');
   appMain.classList.remove('hidden');
@@ -224,24 +208,19 @@ async function initApp() {
   userNameSpan.textContent = userData.name;
   fab.classList.remove('hidden');
   myPostsTab.classList.toggle('hidden', userData.role !== 'farmer');
-  // Map
   if (!map) {
-    map = L.map('map', { zoomControl: true }).setView([22.9734, 78.6569], 6); // India center
+    map = L.map('map', { zoomControl: true }).setView([22.9734, 78.6569], 6);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: "© OSM",
       maxZoom: 19
     }).addTo(map);
     markersGroup = L.layerGroup().addTo(map);
   }
-  // Get location
   getLocation();
-  // Setup dashboard
   setupDashboard();
-  // FAB handler
   fab.onclick = () => showPostModalEdit();
 }
 
-// --- LOCATION ---
 function getLocation() {
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(pos => {
@@ -263,9 +242,7 @@ function getLocation() {
   }
 }
 
-// --- DASHBOARD & REALTIME ---
 function setupDashboard() {
-  // Tabs
   if (userData.role === 'farmer') {
     marketplaceTab.textContent = "Marketplace";
     myPostsTab.textContent = "My Posts";
@@ -279,17 +256,12 @@ function setupDashboard() {
     myPostsTab.classList.add('hidden');
     marketplaceTab.classList.add('active');
   }
-  // Listen to produce/requests
   refreshMarketplace();
 }
 function refreshMarketplace() {
-  // Unsubscribe old listeners
   if (produceUnsub) produceUnsub();
   if (requestsUnsub) requestsUnsub();
-  // Farmer: see all requests (other users), and own produce in "my-posts"
-  // Owner: see produce within 10km, latest first
   if (userData.role === 'farmer') {
-    // Requests (marketplace)
     requestsUnsub = db.collection('requests')
       .orderBy('timestamp', 'desc')
       .onSnapshot(snap => {
@@ -303,7 +275,6 @@ function refreshMarketplace() {
         renderDashboard();
         renderMap();
       });
-    // My posts
     produceUnsub = db.collection('produce')
       .where('userId', '==', currentUser.uid)
       .orderBy('timestamp', 'desc')
@@ -315,7 +286,6 @@ function refreshMarketplace() {
         if (currentDashboardTab === 'my-posts') renderDashboard();
       });
   } else {
-    // Owners: show all produce within 10km, latest first, not expired
     produceUnsub = db.collection('produce')
       .orderBy('timestamp', 'desc')
       .onSnapshot(snap => {
@@ -332,7 +302,6 @@ function refreshMarketplace() {
             }
           }
         });
-        // Sort by newest first
         marketplaceItems.sort((a, b) => b.timestamp - a.timestamp);
         renderDashboard();
         renderMap();
@@ -340,7 +309,7 @@ function refreshMarketplace() {
   }
 }
 
-// --- DASHBOARD RENDER ---
+// --- DASHBOARD RENDER, EDIT/DELETE/CHAT ---
 function renderDashboard() {
   dashboardList.innerHTML = '';
   let items = [];
@@ -389,12 +358,9 @@ function renderDashboard() {
     d.innerHTML = html;
     let card = d.firstElementChild;
 
-    // Card click (show details) for non-my-posts (or my-posts only if not expired)
     if (!(userData.role === 'farmer' && currentDashboardTab === 'my-posts')) {
       card.onclick = () => showDetailsModal(item);
     }
-
-    // Edit/Delete/Chat buttons for Farmer "My Posts"
     if (userData.role === 'farmer' && currentDashboardTab === 'my-posts') {
       card.querySelector('.edit-btn').onclick = (e) => {
         e.stopPropagation();
@@ -406,7 +372,7 @@ function renderDashboard() {
       };
       card.querySelector('.chat-btn').onclick = (e) => {
         e.stopPropagation();
-        openFarmerChats(item);
+        showFarmerChatSelector(item);
       };
     }
     dashboardList.appendChild(card);
@@ -417,7 +383,6 @@ function renderDashboard() {
 function renderMap() {
   markersGroup.clearLayers();
   let items = marketplaceItems;
-  // Show markers for relevant items
   for (let item of items) {
     if (!item.location) continue;
     let marker = L.marker([item.location.lat, item.location.lng], {
@@ -443,20 +408,6 @@ function showPostModalEdit(item = null) {
   voiceBtn.classList.remove('active');
   postEditId = null;
 
-  // Expiration field
-  if (!expirationInput) {
-    expirationInput = document.createElement('input');
-    expirationInput.type = 'date';
-    expirationInput.id = 'expiration';
-    expirationInput.required = true;
-    expirationInput.style.marginBottom = ".7rem";
-    let row = document.createElement('div');
-    row.className = 'input-row';
-    row.appendChild(expirationInput);
-    postForm.insertBefore(row, postForm.querySelector('.voice-row'));
-  }
-
-  // Set default expiration (2 days from now) if adding new
   let today = new Date();
   let defaultExp = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000);
   let minDate = today.toISOString().split('T')[0];
@@ -481,7 +432,6 @@ function showPostModalEdit(item = null) {
 }
 closePostModalBtn.onclick = () => { postModal.classList.add('hidden'); postEditId = null; };
 
-// Submit new or edit
 postForm.onsubmit = async e => {
   e.preventDefault();
   showError(postError, '');
@@ -526,7 +476,6 @@ postForm.onsubmit = async e => {
   }
 };
 
-// Delete post
 async function deleteProduce(id) {
   if (confirm("Are you sure you want to delete this post?")) {
     await db.collection('produce').doc(id).delete();
@@ -543,14 +492,13 @@ function startVoiceInputForPost() {
   voiceStatus.textContent = "Listening...";
   let Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recog = new Recognition();
-  recog.lang = 'hi-IN'; // Accept Hindi + English
+  recog.lang = 'hi-IN,en-US';
   recog.interimResults = false;
   recog.maxAlternatives = 1;
   recog.start();
   recog.onresult = async ev => {
     let transcript = ev.results[0][0].transcript;
     voiceStatus.textContent = "Processing...";
-    // Smarter extraction
     let intent = await getIntentFromVoiceCommand(transcript);
     if (intent.item && intent.quantity && intent.price) {
       itemNameInput.value = intent.item;
@@ -586,12 +534,10 @@ function showDetailsModal(item) {
     <b>Expires:</b> ${item.expiration ? formatDateOnly(item.expiration) : 'N/A'}<br>
     ${isExpired(item.expiration) ? `<span style="color:#b71c1c;">This post is expired and only visible to owner.</span>` : ''}
   `;
-  // WhatsApp
   whatsappBtn.onclick = () => {
     let msg = encodeURIComponent(`Hi, I'm interested in your ${item.itemName} (${item.quantity} ${item.unit}) listed on Kisaan Connect.`);
     window.open(`https://wa.me/91${item.userPhone}?text=${msg}`, '_blank');
   };
-  // In-app chat
   inappChatBtn.onclick = () => {
     detailsModal.classList.add('hidden');
     openChatWindow(item);
@@ -600,8 +546,63 @@ function showDetailsModal(item) {
   detailsModal.classList.remove('hidden');
 }
 
-// --- CHAT WINDOW ---
-// For shop owner OR farmer: open chat with post owner or with owner who messaged on post
+// --- FARMER: Show Chat Selector Modal ---
+let farmerChatModal = null;
+let farmerChatListDiv = null;
+function showFarmerChatSelector(post) {
+  if (!farmerChatModal) {
+    farmerChatModal = document.createElement('div');
+    farmerChatModal.className = 'modal';
+    farmerChatModal.style.zIndex = 8000;
+    farmerChatModal.innerHTML = `
+      <div class="modal-content" style="max-width:460px;">
+        <span class="close-modal material-icons" id="close-farmer-chat-modal">close</span>
+        <h2>Chats for: <span id="farmer-chat-post-title"></span></h2>
+        <div id="farmer-chat-list"></div>
+      </div>`;
+    document.body.appendChild(farmerChatModal);
+    farmerChatListDiv = farmerChatModal.querySelector('#farmer-chat-list');
+    farmerChatModal.querySelector('#close-farmer-chat-modal').onclick = () => farmerChatModal.classList.add('hidden');
+    farmerChatModal.onclick = e => {if (e.target === farmerChatModal) farmerChatModal.classList.add('hidden');};
+  }
+  farmerChatModal.classList.remove('hidden');
+  farmerChatModal.querySelector('#farmer-chat-post-title').textContent = post.itemName;
+
+  db.collection('chats').get().then(snap => {
+    let userMap = {};
+    snap.forEach(doc => {
+      if (doc.id.endsWith('_'+post.id)) {
+        let [id1, id2] = doc.id.replace('_'+post.id,'').split('_');
+        let otherId = (id1 === currentUser.uid) ? id2 : id1;
+        if (otherId !== currentUser.uid) userMap[otherId] = true;
+      }
+    });
+    let userIds = Object.keys(userMap);
+    if (userIds.length === 0) {
+      farmerChatListDiv.innerHTML = `<div style="padding:1em;text-align:center;opacity:.7;">No chats for this post yet.</div>`;
+      return;
+    }
+    Promise.all(userIds.map(uid => db.collection('users').doc(uid).get()))
+      .then(users => {
+        farmerChatListDiv.innerHTML = '';
+        users.forEach(u => {
+          if (!u.exists) return;
+          let btn = document.createElement('button');
+          btn.className = 'details-btn';
+          btn.style.width = '100%';
+          btn.style.marginBottom = '0.5em';
+          btn.innerHTML = `<span class="material-icons">person</span> ${u.data().name} (${u.data().phone})`;
+          btn.onclick = () => {
+            farmerChatModal.classList.add('hidden');
+            openChatWindow(post, { id: u.id, name: u.data().name, phone: u.data().phone });
+          };
+          farmerChatListDiv.appendChild(btn);
+        });
+      });
+  });
+}
+
+// --- Chat Window (real time for both ends) ---
 function openChatWindow(post, otherUserObj) {
   let otherUserId = otherUserObj ? otherUserObj.id : post.userId;
   let chatRoomId = getChatRoomId(currentUser.uid, otherUserId, post.id);
@@ -619,7 +620,7 @@ function openChatWindow(post, otherUserObj) {
         let msg = doc.data();
         let sent = msg.senderId === currentUser.uid;
         let div = document.createElement('div');
-        div.className = 'chat-message ' + (sent ? 'sent':'received');
+        div.className = 'chat-message ' + (sent ? 'sent' : 'received');
         div.innerHTML = `
           <span>${msg.text}</span>
           <span class="timestamp">${formatTimestamp(msg.timestamp)}</span>
@@ -644,6 +645,8 @@ chatForm.onsubmit = async e => {
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
   });
 };
+
+// --- Voice Input with Language Detection (Hindi/English) ---
 chatVoiceBtn.onclick = () => {
   if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
     chatInput.value = "Voice input not supported.";
@@ -652,7 +655,7 @@ chatVoiceBtn.onclick = () => {
   chatVoiceBtn.classList.add('active');
   let Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recog = new Recognition();
-  recog.lang = 'hi-IN';
+  recog.lang = 'hi-IN,en-US';
   recog.interimResults = false;
   recog.maxAlternatives = 1;
   recog.start();
@@ -669,47 +672,13 @@ chatVoiceBtn.onclick = () => {
     chatVoiceBtn.classList.remove('active');
   };
 };
-
-// --- FARMER: VIEW CHATS ON MY POSTS ---
-function openFarmerChats(post) {
-  // Fetch unique chat rooms for this post where the other user is not the farmer
-  db.collection('chats')
-    .where(firebase.firestore.FieldPath.documentId(), '>=', `${currentUser.uid}_${post.id}`)
-    .where(firebase.firestore.FieldPath.documentId(), '<=', `${currentUser.uid}~${post.id}`)
-    .get()
-    .then(snap => {
-      let chatRooms = [];
-      snap.forEach(doc => {
-        if (doc.id.endsWith('_'+post.id)) {
-          let parts = doc.id.split('_');
-          let otherId = parts[0] === currentUser.uid ? parts[1] : parts[0];
-          chatRooms.push({ id: doc.id, otherId });
-        }
-      });
-      if (!chatRooms.length) {
-        alert('No chats yet for this post.');
-        return;
-      }
-      // Show list of chat users (one at a time for now)
-      let sel = prompt('Enter phone or name of the person you want to chat with: \n' +
-        chatRooms.map(c => `UserID: ${c.otherId}`).join('\n'));
-      if (sel) {
-        db.collection('users').doc(sel).get().then(u => {
-          if (u.exists) {
-            openChatWindow(post, { id: sel, name: u.data().name, phone: u.data().phone });
-          } else {
-            alert('User not found.');
-          }
-        });
-      }
-    });
+function containsHindi(str) {
+  return /[\u0900-\u097F]/.test(str);
 }
 
 // --- SMARTER VOICE EXTRACTION: Hindi + English (pyaz, kilo, rupay, per) ---
 async function getIntentFromVoiceCommand(text) {
   text = text.toLowerCase();
-
-  // Normalize common Hindi/English units/prices
   text = text.replace(/kilo ?gram|kilogram|किलोग्राम/g, "kg")
     .replace(/किलो/g, "kg")
     .replace(/रुपया|रुपये|rs|rupees|₹/g, "rs")
@@ -717,7 +686,6 @@ async function getIntentFromVoiceCommand(text) {
     .replace(/टुकड़ा|piece|पीस/g, "piece")
     .replace(/क्विंटल|quintal/g, "quintal");
 
-  // Try: "{qty} {unit} {item} {price} rs per {unit}"
   let re = /(\d+)[ ]*(kg|quintal|piece)?[ ]*([^\d]+?)[ ]*(\d+)[ ]*rs[ ]*per[ ]*(kg|quintal|piece)?/;
   let m = text.match(re);
   if (m) {
@@ -729,8 +697,6 @@ async function getIntentFromVoiceCommand(text) {
       priceUnit: m[5] || m[2] || 'kg'
     };
   }
-
-  // Try: "{qty} {unit} {item}" and later "{price} rs per {unit}"
   let mQty = text.match(/(\d+)[ ]*(kg|quintal|piece)?[ ]*([^\d]+)/);
   let mPrice = text.match(/(\d+)[ ]*rs[ ]*per[ ]*(kg|quintal|piece)?/);
   let res = { quantity: '', unit: '', item: '', price: '', priceUnit: '' };
@@ -743,7 +709,6 @@ async function getIntentFromVoiceCommand(text) {
     res.price = mPrice[1];
     res.priceUnit = mPrice[2] || res.unit || 'kg';
   }
-  // If still missing, try fallback for Hindi: "30 rupay kilo"
   let m2 = text.match(/(\d+)[ ]*rs[ ]*(kg|quintal|piece)?/);
   if (!res.price && m2) {
     res.price = m2[1];
@@ -762,5 +727,6 @@ window.onkeydown = e => {
     if (!postModal.classList.contains('hidden')) postModal.classList.add('hidden');
     if (!detailsModal.classList.contains('hidden')) detailsModal.classList.add('hidden');
     if (!chatWindow.classList.contains('hidden')) chatWindow.classList.add('hidden');
+    if (farmerChatModal && !farmerChatModal.classList.contains('hidden')) farmerChatModal.classList.add('hidden');
   }
 };
