@@ -10,12 +10,10 @@
   --radius: 18px;
   --radius-sm: 10px;
   --text: #222;
-  --text-light: #444;
   --gray: #888;
   --font: 'Inter', 'Segoe UI', Arial, sans-serif;
 }
 
-/* Layout */
 body {
   background: var(--bg);
   font-family: var(--font);
@@ -24,7 +22,6 @@ body {
   min-height: 100vh;
 }
 
-/* Header */
 header {
   display: flex;
   justify-content: space-between;
@@ -75,7 +72,6 @@ header {
   background: #c81e47;
 }
 
-/* Main Layout */
 main {
   display: flex;
   height: calc(100vh - 76px);
@@ -94,6 +90,7 @@ main {
   display: flex;
   flex-direction: column;
   gap: 0;
+  z-index: 2;
 }
 .dashboard-tabs {
   display: flex;
@@ -131,6 +128,8 @@ main {
   box-shadow: 0 2px 24px rgba(39,130,249,0.09);
   display: flex;
   align-items: stretch;
+  position: relative;
+  z-index: 1;
 }
 #map {
   width: 100%;
@@ -138,7 +137,13 @@ main {
   min-height: 300px;
   border-radius: var(--radius);
   box-shadow: 0 2px 16px rgba(39,130,249,0.10);
+  position: relative;
+  z-index: 1;
 }
+.leaflet-container {
+  z-index: 1 !important;
+}
+
 @media (max-width: 1050px) {
   main {
     flex-direction: column;
@@ -240,7 +245,7 @@ main {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 50;
+  z-index: 400 !important;
   transition: background 0.17s;
 }
 .fab:hover {
@@ -252,7 +257,7 @@ main {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
   background: rgba(0,0,0,0.19);
-  z-index: 100;
+  z-index: 900 !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -268,6 +273,7 @@ main {
   box-shadow: var(--shadow);
   position: relative;
   animation: pop-in 0.18s;
+  z-index: 901 !important;
 }
 @keyframes pop-in {
   0% { transform: scale(0.85); opacity: 0; }
@@ -572,7 +578,7 @@ main {
   box-shadow: 0 2px 16px rgba(39,130,249,0.15);
   opacity: 0;
   pointer-events: none;
-  z-index: 200;
+  z-index: 2000;
   transition: opacity 0.22s;
 }
 .snackbar.show {
@@ -580,7 +586,6 @@ main {
   pointer-events: auto;
 }
 
-/* Utility */
 .hidden { display: none !important; }
 ::-webkit-scrollbar { width: 7px; background: #eaeaea; }
 ::-webkit-scrollbar-thumb { background: #b6c2e0; border-radius: 8px; }
