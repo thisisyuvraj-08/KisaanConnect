@@ -1,0 +1,21 @@
+{
+  "name": "Kisaan Connect",
+  "short_name": "KisaanConnect",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f7f8fa",
+  "theme_color": "#2782f9",
+  "description": "A hyperlocal marketplace connecting farmers and Kirana store owners.",
+  "icons": [
+    {
+      "src": "logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}
