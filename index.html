@@ -2,89 +2,173 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
-  <meta name="theme-color" content="#2782f9">
-  <link rel="manifest" href="manifest.json">
-  <link rel="icon" type="image/jpeg" href="logo.jpg">
-  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Kisaan Connect</title>
+  <link rel="stylesheet" href="style.css">
   <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <!-- Material Icons for FABs and UI -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
 <body>
-  <div id="main-app" class="hidden">
-    <header>
-      <div class="brand">
-        <img src="logo.jpg" alt="Kisaan Connect Logo" class="app-logo">
-        <span class="app-title">Kisaan Connect</span>
-      </div>
-      <div class="user-info">
-        <span id="current-user-name"></span>
-        <button id="logout-btn" class="btn btn-logout">Logout</button>
-      </div>
-    </header>
-    <main>
-      <section class="side-panel" id="dashboard-panel">
-        <!-- Dynamic dashboard content -->
-      </section>
-      <section id="map-panel">
-        <div id="map"></div>
-      </section>
-    </main>
-    <button id="fab" class="fab" title="Add"><span>+</span></button>
-    <div id="details-modal" class="modal hidden"></div>
-    <div id="chat-window" class="chat-window hidden"></div>
-  </div>
+  <!-- Header -->
+  <header id="main-header" class="hidden">
+    <div class="logo-title">
+      <span class="material-icons" style="color:#388e3c;">agriculture</span>
+      <span id="app-title">Kisaan Connect</span>
+    </div>
+    <div id="user-info">
+      <span id="user-name"></span>
+      <button id="logout-btn" title="Logout">
+        <span class="material-icons">logout</span>
+      </button>
+    </div>
+  </header>
 
-  <div id="auth-screen">
-    <div class="auth-container">
-      <img src="logo.jpg" alt="Kisaan Connect Logo" class="logo-login">
-      <h2 class="app-title">Kisaan Connect</h2>
-      <div class="toggle-auth">
-        <button id="show-login" class="auth-toggle active">Login</button>
-        <button id="show-register" class="auth-toggle">Register</button>
-      </div>
-      <form id="login-form" class="auth-form">
-        <label>Email</label>
-        <input type="email" id="login-email" required autocomplete="username">
-        <label>Password</label>
-        <input type="password" id="login-password" required autocomplete="current-password">
-        <button type="submit" class="btn btn-primary">Login</button>
+  <!-- Auth Section -->
+  <section id="auth-section" class="centered-section">
+    <div class="auth-card">
+      <h2 id="auth-title">Login</h2>
+      <form id="login-form" autocomplete="off">
+        <input type="email" id="login-email" placeholder="Email" required>
+        <input type="password" id="login-password" placeholder="Password" required>
+        <button type="submit">Login</button>
       </form>
-      <form id="register-form" class="auth-form hidden">
-        <label>Full Name</label>
-        <input type="text" id="register-name" required>
-        <label>Phone (WhatsApp)</label>
-        <input type="tel" id="register-phone" required pattern="[0-9]{10,}">
-        <label>Email</label>
-        <input type="email" id="register-email" required autocomplete="username">
-        <label>Password</label>
-        <input type="password" id="register-password" required autocomplete="new-password" minlength="6">
-        <label>Role</label>
+      <form id="register-form" class="hidden" autocomplete="off">
+        <input type="text" id="register-name" placeholder="Full Name" required>
+        <input type="tel" id="register-phone" placeholder="Phone Number (WhatsApp)" pattern="[6-9]\d{9}" required>
+        <input type="email" id="register-email" placeholder="Email" required>
+        <input type="password" id="register-password" placeholder="Password" required>
         <select id="register-role" required>
-          <option value="">Select Role</option>
+          <option value="" disabled selected>Select Role</option>
           <option value="farmer">I am a Farmer</option>
           <option value="owner">I am a Kirana Owner</option>
         </select>
-        <button type="submit" class="btn btn-primary">Register</button>
+        <button type="submit">Register</button>
       </form>
-      <div id="auth-error" class="auth-error"></div>
+      <p>
+        <span id="toggle-auth">Don't have an account? Register</span>
+      </p>
+      <div id="auth-error" class="error-msg"></div>
+    </div>
+  </section>
+
+  <!-- Main Application Interface -->
+  <main id="app-main" class="hidden">
+    <section class="main-container">
+      <!-- Map Panel -->
+      <div id="map-panel">
+        <div id="map"></div>
+      </div>
+      <!-- Dashboard Panel -->
+      <div id="dashboard-panel">
+        <div class="dashboard-tabs">
+          <button id="marketplace-tab" class="active">Marketplace</button>
+          <button id="my-posts-tab" class="hidden">My Posts</button>
+        </div>
+        <div id="dashboard-list">
+          <!-- Dynamic content based on user role -->
+        </div>
+      </div>
+    </section>
+    <!-- Floating Action Button -->
+    <button id="fab" class="fab" title="Add New">
+      <span class="material-icons">add</span>
+    </button>
+  </main>
+
+  <!-- Post/Request Modal -->
+  <div id="post-modal" class="modal hidden">
+    <div class="modal-content">
+      <span class="close-modal material-icons" id="close-post-modal">close</span>
+      <h2 id="post-modal-title">Post Produce</h2>
+      <form id="post-form">
+        <input type="text" id="item-name" placeholder="Item Name (e.g., Onion)" required>
+        <div class="input-row">
+          <input type="number" id="quantity" placeholder="Quantity" min="1" required>
+          <select id="unit">
+            <option value="kg">Kg</option>
+            <option value="quintal">Quintal</option>
+            <option value="piece">Piece</option>
+          </select>
+        </div>
+        <div class="input-row">
+          <input type="number" id="price" placeholder="Price per unit" min="1" required>
+          <select id="price-unit">
+            <option value="kg">Per Kg</option>
+            <option value="quintal">Per Quintal</option>
+            <option value="piece">Per Piece</option>
+          </select>
+        </div>
+        <div class="voice-row">
+          <button type="button" id="voice-btn" class="voice-btn" title="Voice Input">
+            <span class="material-icons">mic</span>
+          </button>
+          <span id="voice-status"></span>
+        </div>
+        <button type="submit" id="submit-post-btn">Submit</button>
+      </form>
+      <div id="post-error" class="error-msg"></div>
     </div>
   </div>
 
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <!-- Firebase App (the core Firebase SDK) -->
+  <!-- Details Modal -->
+  <div id="details-modal" class="modal hidden">
+    <div class="modal-content">
+      <span class="close-modal material-icons" id="close-details-modal">close</span>
+      <h2 id="details-title"></h2>
+      <div id="details-info"></div>
+      <div class="details-actions">
+        <button id="whatsapp-btn" class="details-btn">
+          <span class="material-icons">whatsapp</span> Chat on WhatsApp
+        </button>
+        <button id="inapp-chat-btn" class="details-btn">
+          <span class="material-icons">chat</span> Chat in App
+        </button>
+        <button id="close-details-btn" class="details-btn">
+          <span class="material-icons">close</span> Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat Window -->
+  <div id="chat-window" class="chat-window hidden">
+    <div class="chat-header">
+      <span id="chat-user-name"></span>
+      <span class="material-icons chat-close" id="close-chat-window">close</span>
+    </div>
+    <div id="chat-messages" class="chat-messages"></div>
+    <form id="chat-form" autocomplete="off">
+      <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off"/>
+      <button type="button" id="chat-voice-btn" title="Send Voice">
+        <span class="material-icons">mic</span>
+      </button>
+      <button type="submit" id="chat-send-btn">
+        <span class="material-icons">send</span>
+      </button>
+    </form>
+  </div>
+
+  <!-- Overlay Loader -->
+  <div id="loader" class="loader hidden">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <!-- Main App Script -->
   <script>
     // For Firebase JS SDK v7.20.0 and later, measurementId is optional
     const firebaseConfig = {
       apiKey: "AIzaSyDnhwxpN_6VXNY2rkfKJuA5XFmSERSOFsM",
       authDomain: "kisaan-connect-da56d.firebaseapp.com",
       projectId: "kisaan-connect-da56d",
-      storageBucket: "kisaan-connect-da56d.appspot.com",
+      storageBucket: "kisaan-connect-da56d.firebasestorage.app",
       messagingSenderId: "401721766160",
       appId: "1:401721766160:web:29644ebd5bcc3116f07595",
       measurementId: "G-9VQVCJYCWE"
@@ -92,12 +176,5 @@
     firebase.initializeApp(firebaseConfig);
   </script>
   <script src="app.js"></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('service-worker.js');
-      });
-    }
-  </script>
 </body>
 </html>
