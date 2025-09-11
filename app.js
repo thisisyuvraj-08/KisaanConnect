@@ -67,7 +67,7 @@ function haversine(lat1, lon1, lat2, lon2) {
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
   const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(toRad(lat1)) * Math.cos(lat2 * Math.PI / 180) *
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
             Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
@@ -436,12 +436,13 @@ function openPostProduceModal() {
     const itemName = $('#produce-item').value.trim();
     const quantity = Number($('#produce-qty').value);
     const price = Number($('#produce-price').value);
+    const submitBtn = $('#produce-form button[type=submit]');
     if (!itemName || !quantity || !price) {
       showSnackbar("Fill all fields!");
-      $('#produce-form button[type=submit]').disabled = false;
+      submitBtn.disabled = false;
       return;
     }
-    $('#produce-form button[type=submit]').disabled = true;
+    submitBtn.disabled = true;
     let loc = null;
     try { loc = await getUserLocation(); } catch {}
     try {
@@ -458,7 +459,7 @@ function openPostProduceModal() {
       if (isMyPostsActive) setupMyPosts();
     } catch (err) {
       showSnackbar("Error posting: " + err.message);
-      $('#produce-form button[type=submit]').disabled = false;
+      submitBtn.disabled = false;
     }
   };
   $$('.modal-close').forEach(el => { el.onclick = closeModal; });
@@ -491,12 +492,13 @@ function openPostRequestModal() {
     e.preventDefault();
     const itemName = $('#request-item').value.trim();
     const quantity = Number($('#request-qty').value);
+    const submitBtn = $('#request-form button[type=submit]');
     if (!itemName || !quantity) {
       showSnackbar("Fill all fields!");
-      $('#request-form button[type=submit]').disabled = false;
+      submitBtn.disabled = false;
       return;
     }
-    $('#request-form button[type=submit]').disabled = true;
+    submitBtn.disabled = true;
     let loc = null;
     try { loc = await getUserLocation(); } catch {}
     try {
@@ -512,7 +514,7 @@ function openPostRequestModal() {
       showSnackbar("Request posted!");
     } catch (err) {
       showSnackbar("Error posting: " + err.message);
-      $('#request-form button[type=submit]').disabled = false;
+      submitBtn.disabled = false;
     }
   };
   $$('.modal-close').forEach(el => { el.onclick = closeModal; });
@@ -534,7 +536,6 @@ function setupProduceVoiceInput() {
   const langSelector = $('#produce-lang');
   let lang = langSelector ? langSelector.value : 'en-IN';
   langSelector && (langSelector.onchange = () => {
-    // Optionally, clear previous status
     $('#mic-status').textContent = '';
     lang = langSelector.value;
   });
