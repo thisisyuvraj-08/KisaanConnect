@@ -1,6 +1,6 @@
-// Kisaan Connect - Robust, Clean, and Hackathon-Ready
+// Kisaan Connect - Fully Working, Robust, and Clean app.js
+// Features: Reliable voice assistant (Hindi/English), correct "My Posts", custom map markers, real-time chat, robust UI
 
-// --- GLOBAL STATE ---
 let currentUser = null;
 let userData = null;
 let map = null;
@@ -29,7 +29,6 @@ const registerForm = $('#register-form');
 const toggleAuth = $('#toggle-auth');
 const authTitle = $('#auth-title');
 const authError = $('#auth-error');
-
 const mainHeader = $('#main-header');
 const userNameSpan = $('#user-name');
 const logoutBtn = $('#logout-btn');
@@ -477,7 +476,7 @@ async function deleteProduce(id) {
   }
 }
 
-// --- VOICE ASSISTANT FOR POST FORM (Hindi + English) ---
+// --- ROBUST VOICE ASSISTANT FOR POST FORM (Hindi + English, many flexible patterns) ---
 function startVoiceInputForPost() {
   if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
     voiceStatus.textContent = "Voice input not supported.";
@@ -516,19 +515,19 @@ function startVoiceInputForPost() {
   };
 }
 
-// --- SMARTER VOICE EXTRACTION: Hindi + English (pyaz, kilo, rupay, per) ---
+// --- SMARTER VOICE EXTRACTION: Hindi + English (pyaz, kilo, rupay, per, etc) ---
 async function getIntentFromVoiceCommand(text) {
-  // Normalize Hindi/English units and prices
   text = text.toLowerCase();
-  text = text.replace(/kilo ?gram|kilogram|किलोग्राम/g, "kg")
+  text = text
+    .replace(/किलोग्राम|kilogram|kilo ?gram/g, "kg")
     .replace(/किलो/g, "kg")
     .replace(/रुपया|रुपये|rs|rupees|₹/g, "rs")
-    .replace(/per|प्रति/g, "per")
-    .replace(/टुकड़ा|piece|पीस/g, "piece")
+    .replace(/प्रति|per/g, "per")
+    .replace(/पीस|piece|टुकड़ा/g, "piece")
     .replace(/क्विंटल|quintal/g, "quintal");
-  // "{qty} {unit} {item} {price} rs per {unit}"
-  let re = /(\d+)[ ]*(kg|quintal|piece)?[ ]*([^\d]+?)[ ]*(\d+)[ ]*rs[ ]*per[ ]*(kg|quintal|piece)?/;
-  let m = text.match(re);
+  // Main: [qty] [unit] [item] [price] rs per [unit] (any order)
+  let main = /(\d+)\s*(kg|quintal|piece)?\s*([^\d]+?)\s*(\d+)\s*rs\s*per\s*(kg|quintal|piece)?/;
+  let m = text.match(main);
   if (m) {
     return {
       quantity: m[1],
@@ -538,9 +537,21 @@ async function getIntentFromVoiceCommand(text) {
       priceUnit: m[5] || m[2] || 'kg'
     };
   }
-  // "{qty} {unit} {item}" and "{price} rs per {unit}"
-  let mQty = text.match(/(\d+)[ ]*(kg|quintal|piece)?[ ]*([^\d]+)/);
-  let mPrice = text.match(/(\d+)[ ]*rs[ ]*per[ ]*(kg|quintal|piece)?/);
+  // Swap: [item] [qty] [unit] [price] rs per [unit]
+  let swap = /([^\d]+)\s+(\d+)\s*(kg|quintal|piece)?\s*(\d+)\s*rs\s*per\s*(kg|quintal|piece)?/;
+  let ms = text.match(swap);
+  if (ms) {
+    return {
+      item: ms[1].trim(),
+      quantity: ms[2],
+      unit: ms[3] || 'kg',
+      price: ms[4],
+      priceUnit: ms[5] || ms[3] || 'kg'
+    };
+  }
+  // [qty] [unit] [item] + [price] rs per [unit]
+  let mQty = text.match(/(\d+)\s*(kg|quintal|piece)?\s*([^\d]+)/);
+  let mPrice = text.match(/(\d+)\s*rs\s*per\s*(kg|quintal|piece)?/);
   let res = { quantity: '', unit: '', item: '', price: '', priceUnit: '' };
   if (mQty) {
     res.quantity = mQty[1];
@@ -551,10 +562,19 @@ async function getIntentFromVoiceCommand(text) {
     res.price = mPrice[1];
     res.priceUnit = mPrice[2] || res.unit || 'kg';
   }
-  let m2 = text.match(/(\d+)[ ]*rs[ ]*(kg|quintal|piece)?/);
+  // [price] rs [unit]
+  let m2 = text.match(/(\d+)\s*rs\s*(kg|quintal|piece)?/);
   if (!res.price && m2) {
     res.price = m2[1];
     res.priceUnit = m2[2] || res.unit || 'kg';
+  }
+  // [qty] [item] [price]
+  let m3 = text.match(/(\d+)\s*([^\d]+)\s*(\d+)\s*rs/);
+  if (!res.item && m3) {
+    res.quantity = m3[1];
+    res.item = m3[2].trim();
+    res.price = m3[3];
+    res.unit = res.priceUnit = 'kg';
   }
   return res;
 }
@@ -684,7 +704,7 @@ chatForm.onsubmit = async e => {
   });
 };
 
-// --- Voice Input with Language Detection (Hindi/English) ---
+// --- Voice Input for Chat (Hindi/English) ---
 chatVoiceBtn.onclick = () => {
   if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
     chatInput.value = "Voice input not supported.";
