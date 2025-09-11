@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kisaan Connect</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <!-- Main Application Container -->
+    <div id="app" class="hidden">
+        <header>
+            <h1>Kisaan Connect</h1>
+            <div class="user-menu">
+                <span id="user-display-name"></span>
+                <button id="logout-btn">Logout</button>
+            </div>
+        </header>
+        <main>
+            <div class="map-container">
+                <div id="map"></div>
+            </div>
+            <div class="dashboard">
+                <!-- This will be dynamically populated based on user role -->
+            </div>
+        </main>
+        <footer>
+            <button id="post-btn" class="fab">+</button>
+        </footer>
+    </div>
+
+    <!-- Login/Register Container -->
+    <div id="auth-container">
+        <!-- Auth forms will be injected here by JavaScript -->
+    </div>
+    
+    <!-- Chat Interface -->
+    <div id="chat-container" class="hidden">
+        <!-- Chat UI will be injected here by JavaScript -->
+    </div>
+
+    <!-- Modals (Pop-ups) -->
+    <div id="modal-container" class="hidden">
+         <!-- Modals for posting, viewing details etc. will be injected here -->
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="module" src="firebase.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
