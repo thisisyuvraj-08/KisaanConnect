@@ -67,7 +67,7 @@ function haversine(lat1, lon1, lat2, lon2) {
   const dLat = toRad(lat2 - lat1);
   const dLon = toRad(lon2 - lon1);
   const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+            Math.cos(toRad(lat1)) * Math.cos(lat2 * Math.PI / 180) *
             Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
@@ -415,13 +415,17 @@ function openPostProduceModal() {
         <input type="number" id="produce-qty" min="1" required>
         <label>Price (per kg, ₹)</label>
         <input type="number" id="produce-price" min="1" required>
-        <div style="margin:10px 0;">
+        <div style="margin:10px 0;display:flex;align-items:center;gap:12px;">
           <button type="button" class="voice-mic-btn" id="produce-mic" title="Voice Input">
             <span id="mic-icn">&#127908;</span>
           </button>
+          <select id="produce-lang" style="padding:4px 8px;font-size:1rem;border-radius:12px;">
+            <option value="en-IN">English</option>
+            <option value="hi-IN">हिंदी</option>
+          </select>
           <span id="mic-status" style="font-size:0.97rem;color:#2782f9"></span>
         </div>
-        <button class="btn" style="width:100%;margin-top:10px;">Post</button>
+        <button class="btn" type="submit" style="width:100%;margin-top:10px;">Post</button>
       </form>
     </div>
   `;
@@ -432,21 +436,30 @@ function openPostProduceModal() {
     const itemName = $('#produce-item').value.trim();
     const quantity = Number($('#produce-qty').value);
     const price = Number($('#produce-price').value);
-    if (!itemName || !quantity || !price) return;
+    if (!itemName || !quantity || !price) {
+      showSnackbar("Fill all fields!");
+      $('#produce-form button[type=submit]').disabled = false;
+      return;
+    }
     $('#produce-form button[type=submit]').disabled = true;
     let loc = null;
     try { loc = await getUserLocation(); } catch {}
-    await db.collection('produce').add({
-      itemName, quantity, price,
-      userId: currentUser.uid,
-      userName: userData.name,
-      userPhone: userData.phone,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      location: loc
-    });
-    closeModal();
-    showSnackbar("Posted successfully!");
-    if (isMyPostsActive) setupMyPosts();
+    try {
+      await db.collection('produce').add({
+        itemName, quantity, price,
+        userId: currentUser.uid,
+        userName: userData.name,
+        userPhone: userData.phone,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        location: loc
+      });
+      closeModal();
+      showSnackbar("Posted successfully!");
+      if (isMyPostsActive) setupMyPosts();
+    } catch (err) {
+      showSnackbar("Error posting: " + err.message);
+      $('#produce-form button[type=submit]').disabled = false;
+    }
   };
   $$('.modal-close').forEach(el => { el.onclick = closeModal; });
 }
@@ -478,20 +491,29 @@ function openPostRequestModal() {
     e.preventDefault();
     const itemName = $('#request-item').value.trim();
     const quantity = Number($('#request-qty').value);
-    if (!itemName || !quantity) return;
+    if (!itemName || !quantity) {
+      showSnackbar("Fill all fields!");
+      $('#request-form button[type=submit]').disabled = false;
+      return;
+    }
     $('#request-form button[type=submit]').disabled = true;
     let loc = null;
     try { loc = await getUserLocation(); } catch {}
-    await db.collection('requests').add({
-      itemName, quantity,
-      userId: currentUser.uid,
-      userName: userData.name,
-      userPhone: userData.phone,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      location: loc
-    });
-    closeModal();
-    showSnackbar("Request posted!");
+    try {
+      await db.collection('requests').add({
+        itemName, quantity,
+        userId: currentUser.uid,
+        userName: userData.name,
+        userPhone: userData.phone,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        location: loc
+      });
+      closeModal();
+      showSnackbar("Request posted!");
+    } catch (err) {
+      showSnackbar("Error posting: " + err.message);
+      $('#request-form button[type=submit]').disabled = false;
+    }
   };
   $$('.modal-close').forEach(el => { el.onclick = closeModal; });
 }
@@ -507,36 +529,45 @@ function getUserLocation() {
   });
 }
 
-// Voice to form
+// Voice to form (with Hindi support)
 function setupProduceVoiceInput() {
+  const langSelector = $('#produce-lang');
+  let lang = langSelector ? langSelector.value : 'en-IN';
+  langSelector && (langSelector.onchange = () => {
+    // Optionally, clear previous status
+    $('#mic-status').textContent = '';
+    lang = langSelector.value;
+  });
   setupVoiceInput(
     $('#produce-mic'), $('#mic-status'),
-    async (transcript) => {
-      const intent = await getIntentFromVoiceCommand(transcript);
+    async (transcript, usedLang) => {
+      const intent = await getIntentFromVoiceCommand(transcript, usedLang || lang);
       if (intent.item) $('#produce-item').value = intent.item;
       if (intent.quantity) $('#produce-qty').value = intent.quantity;
       if (intent.price) $('#produce-price').value = intent.price;
       if (!intent.quantity) {
-        $('#mic-status').textContent = 'Please speak quantity (e.g., "40 kilo")...';
-        listenOnce('hi', result => {
+        $('#mic-status').textContent = usedLang === 'hi-IN'
+          ? 'कृपया मात्रा बोलें (जैसे, "40 किलो")...'
+          : 'Please speak quantity (e.g., "40 kilo")...';
+        listenOnce(usedLang || lang, result => {
           const qty = (result.match(/\d+/) || [])[0];
           if (qty) $('#produce-qty').value = qty;
           $('#mic-status').textContent = '';
         });
       }
-    }
+    }, lang
   );
 }
 function setupRequestVoiceInput() {
   setupVoiceInput(
     $('#request-mic'), $('#mic-status'),
-    async (transcript) => {
-      const intent = await getIntentFromVoiceCommand(transcript);
+    async (transcript, usedLang) => {
+      const intent = await getIntentFromVoiceCommand(transcript, usedLang || 'en-IN');
       if (intent.item) $('#request-item').value = intent.item;
       if (intent.quantity) $('#request-qty').value = intent.quantity;
       if (!intent.quantity) {
         $('#mic-status').textContent = 'Please speak quantity (e.g., "40 kilo")...';
-        listenOnce('hi', result => {
+        listenOnce(usedLang || 'en-IN', result => {
           const qty = (result.match(/\d+/) || [])[0];
           if (qty) $('#request-qty').value = qty;
           $('#mic-status').textContent = '';
@@ -545,7 +576,7 @@ function setupRequestVoiceInput() {
     }
   );
 }
-function setupVoiceInput(micBtn, statusEl, callback) {
+function setupVoiceInput(micBtn, statusEl, callback, lang = 'en-IN') {
   let recognizing = false;
   let recognition;
   micBtn.onclick = () => {
@@ -558,7 +589,7 @@ function setupVoiceInput(micBtn, statusEl, callback) {
       return;
     }
     recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = 'en-IN';
+    recognition.lang = lang;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     recognizing = true;
@@ -569,7 +600,7 @@ function setupVoiceInput(micBtn, statusEl, callback) {
       micBtn.classList.remove('active');
       statusEl.textContent = '';
       const transcript = e.results[0][0].transcript;
-      callback(transcript);
+      callback(transcript, lang);
     };
     recognition.onerror = e => {
       recognizing = false;
@@ -586,42 +617,49 @@ function setupVoiceInput(micBtn, statusEl, callback) {
 }
 function listenOnce(lang, cb) {
   let recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-  recognition.lang = lang === 'hi' ? 'hi-IN' : 'en-US';
+  recognition.lang = lang === 'hi-IN' ? 'hi-IN' : 'en-IN';
   recognition.interimResults = false;
   recognition.maxAlternatives = 1;
   recognition.onresult = e => cb(e.results[0][0].transcript);
   recognition.start();
 }
-async function getIntentFromVoiceCommand(text) {
+async function getIntentFromVoiceCommand(text, lang = 'en-IN') {
   let item = '';
   let quantity = '';
   let price = '';
   let lower = text.toLowerCase();
 
-  let qtyMatch = lower.match(/(\d+(\.\d+)?)\s*(kg|kilo|kilogram|किलो)?/) || [];
-  if (qtyMatch[1]) quantity = qtyMatch[1];
-  let priceMatch = lower.match(/(?:rs|₹|rupees?|price|पर|per)\s*(\d+(\.\d+)?)/) || lower.match(/(\d+(\.\d+)?)\s*(rs|₹|rupees?|price|per)/i) || [];
-  if (priceMatch[1]) price = priceMatch[1];
+  // Hindi support regexes
+  let qtyMatch = lower.match(/(\d+(\.\d+)?)\s*(kg|kilo|kilogram|किलो|किलोग्राम)?/);
+  if (qtyMatch && qtyMatch[1]) quantity = qtyMatch[1];
 
-  let itemMatch = lower;
-  if (quantity) {
-    itemMatch = itemMatch.split(quantity)[1] || '';
-    itemMatch = itemMatch.replace(/(kg|kilo|kilogram|per|price|rs|₹|rupees?|at|mein|मे|पर|प्राइस|कीमत|rs|₹|\d+)/g, '').trim();
-    if (price) itemMatch = itemMatch.split(price)[0];
-    item = itemMatch.split(' ').filter(w => w.length > 2)[0] || '';
+  // English and Hindi for price
+  let priceMatch = lower.match(/(?:rs|₹|rupees?|price|पर|प्रति|कीमत|price|price per|प्राइस)\s*(\d+(\.\d+)?)/)
+    || lower.match(/(\d+(\.\d+)?)\s*(rs|₹|rupees?|price|per|प्रति|कीमत|प्राइस)/i);
+  if (priceMatch && priceMatch[1]) price = priceMatch[1];
+
+  // Try to extract item name (English or Hindi), expand with more items as needed
+  let knownItems = [
+    // English
+    'tomato', 'onion', 'potato', 'cabbage', 'carrot', 'chili', 'cauliflower', 'beans', 'peas', 'brinjal', 'apple', 'banana', 'mango', 'pomegranate', 'orange', 'lemon', 'ladyfinger', 'cucumber', 'radish', 'spinach',
+    // Hindi
+    'टमाटर', 'प्याज', 'आलू', 'पत्ता गोभी', 'गाजर', 'मिर्च', 'फूलगोभी', 'फलियां', 'मटर', 'बैंगन', 'सेब', 'केला', 'आम', 'अनार', 'संतरा', 'नींबू', 'भिंडी', 'खीरा', 'मूली', 'पालक'
+  ];
+
+  for (const it of knownItems) {
+    if (lower.includes(it)) item = it;
   }
+
+  // Fallback to previous logic
   if (!item) {
-    const items = ['tomato','onion','potato','cabbage','carrot','chili','cauliflower','beans','peas','brinjal','apple','banana','mango','pomegranate','orange','lemon','bhindi','ladyfinger','gobhi','gajar','mooli','radish','kheera','cucumber','mirchi'];
-    for (const it of items) if (lower.includes(it)) item = it;
-  }
-  if (!item) {
-    let m = lower.match(/(?:kg|kilo|kilogram|किलो)\s+(\w+)/);
+    let m = lower.match(/(?:kg|kilo|kilogram|किलो|किलोग्राम)\s+(\w+)/);
     if (m) item = m[1];
   }
   if (!item) {
     item = lower.split(' ').find(w => w.length > 3 && !/\d/.test(w)) || '';
   }
   if (item) item = item.charAt(0).toUpperCase() + item.slice(1);
+
   return { item, quantity, price };
 }
 
