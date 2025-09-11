@@ -1,7 +1,4 @@
-/* Kisaan Connect - app.js
-   Author: Hackathon-ready, robust, clean, ES6+, vanilla JS only!
-   Features: Firebase Auth/Firestore, Map (Leaflet), Real-time, Voice Assistant, Chat, Accessibility
-*/
+// Kisaan Connect - app.js (improved, bugfixed, all features!)
 
 // --- GLOBAL STATE ---
 let currentUser = null;
@@ -17,6 +14,7 @@ let currentDashboardTab = 'marketplace'; // or 'my-posts'
 let chatUnsub = null;
 let activeChatRoomId = null;
 let activeChatOtherUser = null;
+let postEditId = null; // editing post id
 
 // --- FIREBASE REFS ---
 const auth = firebase.auth();
@@ -42,8 +40,6 @@ const appMain = $('#app-main');
 const fab = $('#fab');
 
 // Map & Dashboard
-const mapPanel = $('#map-panel');
-const dashboardPanel = $('#dashboard-panel');
 const dashboardList = $('#dashboard-list');
 const marketplaceTab = $('#marketplace-tab');
 const myPostsTab = $('#my-posts-tab');
@@ -62,6 +58,10 @@ const voiceBtn = $('#voice-btn');
 const voiceStatus = $('#voice-status');
 const postError = $('#post-error');
 
+// Expiration field (created dynamically in showPostModalEdit if not present)
+let expirationInput = null;
+
+// Details Modal
 const detailsModal = $('#details-modal');
 const closeDetailsModalBtn = $('#close-details-modal');
 const closeDetailsBtn = $('#close-details-btn');
@@ -72,7 +72,6 @@ const inappChatBtn = $('#inapp-chat-btn');
 
 // Chat
 const chatWindow = $('#chat-window');
-const chatHeader = $('.chat-header');
 const chatUserName = $('#chat-user-name');
 const closeChatWindowBtn = $('#close-chat-window');
 const chatMessagesDiv = $('#chat-messages');
@@ -101,6 +100,10 @@ function formatTimestamp(ts) {
   let d = ts.toDate ? ts.toDate() : new Date(ts);
   return d.toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' });
 }
+function formatDateOnly(ts) {
+  let d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString('en-CA');
+}
 function haversineDist(lat1, lng1, lat2, lng2) {
   // Returns distance in km
   const toRad = d => d * Math.PI / 180;
@@ -112,6 +115,12 @@ function haversineDist(lat1, lng1, lat2, lng2) {
 function getChatRoomId(uid1, uid2, refId) {
   // refId is produce/request docId
   return [uid1, uid2].sort().join('_') + '_' + refId;
+}
+function isExpired(expiry) {
+  if (!expiry) return false;
+  let now = new Date();
+  let exp = expiry.toDate ? expiry.toDate() : new Date(expiry);
+  return now > exp;
 }
 
 // --- AUTH LOGIC ---
@@ -229,7 +238,7 @@ async function initApp() {
   // Setup dashboard
   setupDashboard();
   // FAB handler
-  fab.onclick = showPostModal;
+  fab.onclick = () => showPostModalEdit();
 }
 
 // --- LOCATION ---
@@ -245,7 +254,6 @@ function getLocation() {
       map.setView([myLocation.lat, myLocation.lng], 13);
       refreshMarketplace();
     }, err => {
-      // Location denied: fallback
       myLocation = { lat: 22.9734, lng: 78.6569 };
       refreshMarketplace();
     }, { enableHighAccuracy: true, timeout: 10000 });
@@ -307,7 +315,7 @@ function refreshMarketplace() {
         if (currentDashboardTab === 'my-posts') renderDashboard();
       });
   } else {
-    // Owners: show all produce within 10km, latest first
+    // Owners: show all produce within 10km, latest first, not expired
     produceUnsub = db.collection('produce')
       .orderBy('timestamp', 'desc')
       .onSnapshot(snap => {
@@ -319,7 +327,7 @@ function refreshMarketplace() {
               myLocation.lat, myLocation.lng,
               data.location.lat, data.location.lng
             );
-            if (dist <= 10) {
+            if (dist <= 10 && !isExpired(data.expiration)) {
               marketplaceItems.push({ ...data, id: doc.id, type: 'produce', dist: dist });
             }
           }
@@ -337,8 +345,8 @@ function renderDashboard() {
   dashboardList.innerHTML = '';
   let items = [];
   if (userData.role === 'farmer') {
-    if (currentDashboardTab === 'marketplace') items = marketplaceItems;
-    else items = myPosts;
+    if (currentDashboardTab === 'my-posts') items = myPosts;
+    else items = marketplaceItems;
   } else {
     items = marketplaceItems;
   }
@@ -347,28 +355,60 @@ function renderDashboard() {
     return;
   }
   for (let item of items) {
+    let expired = isExpired(item.expiration);
     let html = `
       <div class="dashboard-card" data-type="${item.type}" data-id="${item.id}">
         <div class="card-header">
-          <span class="material-icons" style="font-size:1.4em;color:${item.type==='produce'?'#388e3c':'#ffb300'};">
+          <span class="material-icons" style="font-size:1.25em;color:${item.type==='produce'?'#388e3c':'#ffb300'};">
             ${item.type === 'produce' ? 'spa' : 'storefront'}
           </span>
           <span>${item.itemName} <span style="font-size:.92em;opacity:.7;">(${item.quantity} ${item.unit})</span></span>
+          ${expired ? `<span class="expired-label">Expired</span>` : item.type === 'produce' ? `<span class="active-label">Active</span>` : ''}
         </div>
         <div class="card-meta">
           Price: ₹${item.price} /${item.priceUnit}
-          ${item.dist !== undefined ? `<span style="float:right;">${item.dist.toFixed(1)} km</span>` : ''}
+          ${item.dist !== undefined ? `<span>${item.dist.toFixed(1)} km</span>` : ''}
         </div>
         <div class="card-footer">
           <span>By: ${item.userName}</span>
           <span>${formatTimestamp(item.timestamp)}</span>
         </div>
+        <div class="card-footer">
+          <span>Expires: ${item.expiration ? formatDateOnly(item.expiration) : 'N/A'}</span>
+        </div>
+        ${userData.role === 'farmer' && currentDashboardTab === 'my-posts' ? `
+        <div class="card-actions">
+          <button class="edit-btn" data-id="${item.id}">Edit</button>
+          <button class="delete-btn" data-id="${item.id}">Delete</button>
+          <button class="chat-btn" data-id="${item.id}">View Chats</button>
+        </div>
+        ` : ''}
       </div>
     `;
     let d = document.createElement('div');
     d.innerHTML = html;
     let card = d.firstElementChild;
-    card.onclick = () => showDetailsModal(item);
+
+    // Card click (show details) for non-my-posts (or my-posts only if not expired)
+    if (!(userData.role === 'farmer' && currentDashboardTab === 'my-posts')) {
+      card.onclick = () => showDetailsModal(item);
+    }
+
+    // Edit/Delete/Chat buttons for Farmer "My Posts"
+    if (userData.role === 'farmer' && currentDashboardTab === 'my-posts') {
+      card.querySelector('.edit-btn').onclick = (e) => {
+        e.stopPropagation();
+        showPostModalEdit(item);
+      };
+      card.querySelector('.delete-btn').onclick = (e) => {
+        e.stopPropagation();
+        deleteProduce(item.id);
+      };
+      card.querySelector('.chat-btn').onclick = (e) => {
+        e.stopPropagation();
+        openFarmerChats(item);
+      };
+    }
     dashboardList.appendChild(card);
   }
 }
@@ -395,20 +435,53 @@ function renderMap() {
   }
 }
 
-// --- POST/REQUEST CREATION ---
-function showPostModal() {
+// --- POST/REQUEST CREATION & EDIT ---
+function showPostModalEdit(item = null) {
   clearForm(postForm);
   showError(postError, '');
   voiceStatus.textContent = '';
   voiceBtn.classList.remove('active');
-  if (userData.role === 'farmer') postModalTitle.textContent = "Post Produce";
-  else postModalTitle.textContent = "Post Request";
+  postEditId = null;
+
+  // Expiration field
+  if (!expirationInput) {
+    expirationInput = document.createElement('input');
+    expirationInput.type = 'date';
+    expirationInput.id = 'expiration';
+    expirationInput.required = true;
+    expirationInput.style.marginBottom = ".7rem";
+    let row = document.createElement('div');
+    row.className = 'input-row';
+    row.appendChild(expirationInput);
+    postForm.insertBefore(row, postForm.querySelector('.voice-row'));
+  }
+
+  // Set default expiration (2 days from now) if adding new
+  let today = new Date();
+  let defaultExp = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000);
+  let minDate = today.toISOString().split('T')[0];
+  expirationInput.min = minDate;
+
+  if (item) {
+    postModalTitle.textContent = "Edit Post";
+    itemNameInput.value = item.itemName;
+    quantityInput.value = item.quantity;
+    unitSelect.value = item.unit;
+    priceInput.value = item.price;
+    priceUnitSelect.value = item.priceUnit;
+    expirationInput.value = item.expiration ? formatDateOnly(item.expiration) : defaultExp.toISOString().split('T')[0];
+    postEditId = item.id;
+  } else {
+    postModalTitle.textContent = userData.role === 'farmer' ? "Post Produce" : "Post Request";
+    expirationInput.value = defaultExp.toISOString().split('T')[0];
+    postEditId = null;
+  }
   postModal.classList.remove('hidden');
-  // Voice handler
   voiceBtn.onclick = startVoiceInputForPost;
 }
-closePostModalBtn.onclick = () => postModal.classList.add('hidden');
+closePostModalBtn.onclick = () => { postModal.classList.add('hidden'); postEditId = null; };
 
+// Submit new or edit
 postForm.onsubmit = async e => {
   e.preventDefault();
   showError(postError, '');
@@ -417,7 +490,8 @@ postForm.onsubmit = async e => {
   let unit = unitSelect.value;
   let price = priceInput.value.trim();
   let priceUnit = priceUnitSelect.value;
-  if (!itemName || !quantity || !price) {
+  let expirationDate = expirationInput.value;
+  if (!itemName || !quantity || !price || !expirationDate) {
     showError(postError, "Please fill all fields.");
     return;
   }
@@ -432,15 +506,19 @@ postForm.onsubmit = async e => {
     userName: userData.name,
     userPhone: userData.phone,
     timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-    location: myLocation
+    location: myLocation,
+    expiration: firebase.firestore.Timestamp.fromDate(new Date(expirationDate))
   };
   try {
-    if (userData.role === 'farmer') {
+    if (postEditId) {
+      await db.collection('produce').doc(postEditId).update(doc);
+    } else if (userData.role === 'farmer') {
       await db.collection('produce').add(doc);
     } else {
       await db.collection('requests').add(doc);
     }
     postModal.classList.add('hidden');
+    postEditId = null;
     showLoader(false);
   } catch (err) {
     showError(postError, err.message);
@@ -448,7 +526,14 @@ postForm.onsubmit = async e => {
   }
 };
 
-// --- VOICE ASSISTANT FOR POST FORM ---
+// Delete post
+async function deleteProduce(id) {
+  if (confirm("Are you sure you want to delete this post?")) {
+    await db.collection('produce').doc(id).delete();
+  }
+}
+
+// --- VOICE ASSISTANT FOR POST FORM (Hindi + English) ---
 function startVoiceInputForPost() {
   if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
     voiceStatus.textContent = "Voice input not supported.";
@@ -465,7 +550,7 @@ function startVoiceInputForPost() {
   recog.onresult = async ev => {
     let transcript = ev.results[0][0].transcript;
     voiceStatus.textContent = "Processing...";
-    // Simulate AI intent extraction
+    // Smarter extraction
     let intent = await getIntentFromVoiceCommand(transcript);
     if (intent.item && intent.quantity && intent.price) {
       itemNameInput.value = intent.item;
@@ -497,7 +582,9 @@ function showDetailsModal(item) {
     <b>Price:</b> ₹${item.price} /${item.priceUnit}<br>
     <b>Posted by:</b> ${item.userName}<br>
     <b>Contact:</b> ${item.userPhone}<br>
-    <b>Posted on:</b> ${formatTimestamp(item.timestamp)}
+    <b>Posted on:</b> ${formatTimestamp(item.timestamp)}<br>
+    <b>Expires:</b> ${item.expiration ? formatDateOnly(item.expiration) : 'N/A'}<br>
+    ${isExpired(item.expiration) ? `<span style="color:#b71c1c;">This post is expired and only visible to owner.</span>` : ''}
   `;
   // WhatsApp
   whatsappBtn.onclick = () => {
@@ -514,18 +601,16 @@ function showDetailsModal(item) {
 }
 
 // --- CHAT WINDOW ---
-function openChatWindow(item) {
-  // Chat between currentUser and item.userId, refId = item.id
-  let otherUserId = item.userId;
-  let chatRoomId = getChatRoomId(currentUser.uid, otherUserId, item.id);
+// For shop owner OR farmer: open chat with post owner or with owner who messaged on post
+function openChatWindow(post, otherUserObj) {
+  let otherUserId = otherUserObj ? otherUserObj.id : post.userId;
+  let chatRoomId = getChatRoomId(currentUser.uid, otherUserId, post.id);
   activeChatRoomId = chatRoomId;
-  activeChatOtherUser = { id: otherUserId, name: item.userName, phone: item.userPhone };
-  chatUserName.textContent = item.userName;
+  activeChatOtherUser = otherUserObj || { id: post.userId, name: post.userName, phone: post.userPhone };
+  chatUserName.textContent = activeChatOtherUser.name;
   chatWindow.classList.remove('hidden');
   chatMessagesDiv.innerHTML = '';
-  // Unsubscribe old
   if (chatUnsub) chatUnsub();
-  // Listen to messages
   chatUnsub = db.collection('chats').doc(chatRoomId).collection('messages')
     .orderBy('timestamp')
     .onSnapshot(snap => {
@@ -540,24 +625,7 @@ function openChatWindow(item) {
           <span class="timestamp">${formatTimestamp(msg.timestamp)}</span>
         `;
         chatMessagesDiv.appendChild(div);
-        // If farmer and received a message from owner in English: translate, speak
-        if (
-          userData.role === 'farmer' && !sent &&
-          msg.senderId !== currentUser.uid &&
-          msg.text
-        ) {
-          // Simulate translation
-          translateText(msg.text, 'en', 'hi').then(hindiText => {
-            let div2 = document.createElement('div');
-            div2.className = 'chat-message received';
-            div2.style.background = "#fff9c4";
-            div2.innerHTML = `<span>${hindiText} <span style="font-size:.92em;color:#bdb76b;">(अनुवाद)</span></span>`;
-            chatMessagesDiv.appendChild(div2);
-            speakHindi(hindiText);
-          });
-        }
       });
-      // Scroll to bottom
       chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
     });
 }
@@ -565,8 +633,6 @@ closeChatWindowBtn.onclick = () => {
   chatWindow.classList.add('hidden');
   if (chatUnsub) chatUnsub();
 };
-
-// --- SEND CHAT ---
 chatForm.onsubmit = async e => {
   e.preventDefault();
   let text = chatInput.value.trim();
@@ -578,7 +644,6 @@ chatForm.onsubmit = async e => {
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
   });
 };
-// --- Voice chat (mic) ---
 chatVoiceBtn.onclick = () => {
   if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
     chatInput.value = "Voice input not supported.";
@@ -605,78 +670,90 @@ chatVoiceBtn.onclick = () => {
   };
 };
 
-// --- SIMULATED AI FUNCTIONS ---
-// Simulate extraction of {item, quantity, unit, price, priceUnit} from sentence.
+// --- FARMER: VIEW CHATS ON MY POSTS ---
+function openFarmerChats(post) {
+  // Fetch unique chat rooms for this post where the other user is not the farmer
+  db.collection('chats')
+    .where(firebase.firestore.FieldPath.documentId(), '>=', `${currentUser.uid}_${post.id}`)
+    .where(firebase.firestore.FieldPath.documentId(), '<=', `${currentUser.uid}~${post.id}`)
+    .get()
+    .then(snap => {
+      let chatRooms = [];
+      snap.forEach(doc => {
+        if (doc.id.endsWith('_'+post.id)) {
+          let parts = doc.id.split('_');
+          let otherId = parts[0] === currentUser.uid ? parts[1] : parts[0];
+          chatRooms.push({ id: doc.id, otherId });
+        }
+      });
+      if (!chatRooms.length) {
+        alert('No chats yet for this post.');
+        return;
+      }
+      // Show list of chat users (one at a time for now)
+      let sel = prompt('Enter phone or name of the person you want to chat with: \n' +
+        chatRooms.map(c => `UserID: ${c.otherId}`).join('\n'));
+      if (sel) {
+        db.collection('users').doc(sel).get().then(u => {
+          if (u.exists) {
+            openChatWindow(post, { id: sel, name: u.data().name, phone: u.data().phone });
+          } else {
+            alert('User not found.');
+          }
+        });
+      }
+    });
+}
+
+// --- SMARTER VOICE EXTRACTION: Hindi + English (pyaz, kilo, rupay, per) ---
 async function getIntentFromVoiceCommand(text) {
-  // Try to extract: "50 kg onion at 20 rupees per kg"
   text = text.toLowerCase();
-  let item = '', quantity = '', unit = '', price = '', priceUnit = '';
-  // Find quantity and unit
-  let match1 = text.match(/(\d+)\s*(kg|quintal|piece|kilogram|pieces)?/);
-  if (match1) {
-    quantity = match1[1];
-    unit = match1[2] || 'kg';
-    if (unit === 'kilogram') unit = 'kg';
-    if (unit === 'pieces') unit = 'piece';
-  }
-  // Find price
-  let match2 = text.match(/(\d+)\s*(rs|rupees|₹)\s*(per|\/)\s*(kg|quintal|piece)?/);
-  if (match2) {
-    price = match2[1];
-    priceUnit = match2[4] || 'kg';
-  } else {
-    // Try: "20 rupees per kg" after quantity+item
-    let match3 = text.match(/at\s*(\d+)\s*(rs|rupees|₹)?\s*(per|\/)?\s*(kg|quintal|piece)?/);
-    if (match3) {
-      price = match3[1];
-      priceUnit = match3[4] || 'kg';
-    }
-  }
-  // Find item name: look for word after quantity/unit
-  let afterQ = text.split(match1 ? match1[0] : '')[1] || '';
-  let itemMatch = afterQ.match(/([a-zA-Z\u0900-\u097F]+)/); // Hindi/English
-  if (itemMatch) {
-    item = itemMatch[1].trim();
-  }
-  // Fallback: try to find first word that is not a number/unit/price
-  if (!item) {
-    let fallback = text.match(/(onion|pyaaz|potato|aloo|tomato|tamatar|[a-zA-Z\u0900-\u097F]+)/);
-    if (fallback) item = fallback[1];
-  }
-  return { item, quantity, unit, price, priceUnit };
-}
-// Simulate translation (returns Hindi for demo)
-async function translateText(text, from, to) {
-  // You may use a lookup or dummy translation for hackathon
-  // We'll just append (Hindi) for demo
-  if (to === 'hi') {
-    // Simulate: Only handle English produce sentences
-    let tr = {
-      "hello": "नमस्ते",
-      "i am interested": "मुझे रुचि है",
-      "how much": "कितना",
-      "what is the price": "क्या भाव है",
-      "can you deliver": "क्या आप डिलीवर कर सकते हैं"
+
+  // Normalize common Hindi/English units/prices
+  text = text.replace(/kilo ?gram|kilogram|किलोग्राम/g, "kg")
+    .replace(/किलो/g, "kg")
+    .replace(/रुपया|रुपये|rs|rupees|₹/g, "rs")
+    .replace(/per|प्रति/g, "per")
+    .replace(/टुकड़ा|piece|पीस/g, "piece")
+    .replace(/क्विंटल|quintal/g, "quintal");
+
+  // Try: "{qty} {unit} {item} {price} rs per {unit}"
+  let re = /(\d+)[ ]*(kg|quintal|piece)?[ ]*([^\d]+?)[ ]*(\d+)[ ]*rs[ ]*per[ ]*(kg|quintal|piece)?/;
+  let m = text.match(re);
+  if (m) {
+    return {
+      quantity: m[1],
+      unit: m[2] || 'kg',
+      item: m[3].trim(),
+      price: m[4],
+      priceUnit: m[5] || m[2] || 'kg'
     };
-    let lower = text.toLowerCase();
-    for (let k in tr) {
-      if (lower.includes(k)) return tr[k];
-    }
-    return text + " (हिंदी अनुवाद)";
   }
-  return text;
-}
-// Speak Hindi text
-function speakHindi(text) {
-  if (!('speechSynthesis' in window)) return;
-  let utter = new SpeechSynthesisUtterance(text);
-  utter.lang = 'hi-IN';
-  window.speechSynthesis.speak(utter);
+
+  // Try: "{qty} {unit} {item}" and later "{price} rs per {unit}"
+  let mQty = text.match(/(\d+)[ ]*(kg|quintal|piece)?[ ]*([^\d]+)/);
+  let mPrice = text.match(/(\d+)[ ]*rs[ ]*per[ ]*(kg|quintal|piece)?/);
+  let res = { quantity: '', unit: '', item: '', price: '', priceUnit: '' };
+  if (mQty) {
+    res.quantity = mQty[1];
+    res.unit = mQty[2] || 'kg';
+    res.item = mQty[3].trim();
+  }
+  if (mPrice) {
+    res.price = mPrice[1];
+    res.priceUnit = mPrice[2] || res.unit || 'kg';
+  }
+  // If still missing, try fallback for Hindi: "30 rupay kilo"
+  let m2 = text.match(/(\d+)[ ]*rs[ ]*(kg|quintal|piece)?/);
+  if (!res.price && m2) {
+    res.price = m2[1];
+    res.priceUnit = m2[2] || res.unit || 'kg';
+  }
+  return res;
 }
 
 // --- MISC UI ---
 window.onclick = e => {
-  // Close modal if clicked outside
   if (e.target === postModal) postModal.classList.add('hidden');
   if (e.target === detailsModal) detailsModal.classList.add('hidden');
 };
