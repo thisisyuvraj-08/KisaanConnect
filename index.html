@@ -7,8 +7,6 @@
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="style.css">
   <!-- Google Fonts: Poppins for app name, Nunito for body -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600&family=Poppins:wght@700&display=swap" rel="stylesheet">
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
@@ -104,6 +102,9 @@
             <option value="piece">Per Piece</option>
           </select>
         </div>
+        <div class="input-row">
+          <input type="date" id="expiration" required>
+        </div>
         <div class="voice-row">
           <button type="button" id="voice-btn" class="voice-btn" title="Voice Input">
             <span class="material-icons">mic</span>
@@ -171,7 +172,7 @@
       apiKey: "AIzaSyDnhwxpN_6VXNY2rkfKJuA5XFmSERSOFsM",
       authDomain: "kisaan-connect-da56d.firebaseapp.com",
       projectId: "kisaan-connect-da56d",
-      storageBucket: "kisaan-connect-da56d.firebasestorage.app",
+      storageBucket: "kisaan-connect-da56d.appspot.com",
       messagingSenderId: "401721766160",
       appId: "1:401721766160:web:29644ebd5bcc3116f07595",
       measurementId: "G-9VQVCJYCWE"
@@ -180,7 +181,7 @@
   </script>
   <script src="app.js"></script>
   <script>
-    // Progressive Web App - Register Service Worker
+    // PWA - Register Service Worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('service-worker.js');
