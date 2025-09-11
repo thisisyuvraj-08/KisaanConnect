@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kisaan Connect</title>
+    <title>Kisaan Connect - Farmer & Kirana Owner Marketplace</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -35,7 +35,7 @@
         </main>
     </div>
 
-    <!-- Auth Container (shown by default) -->
+    <!-- Auth Container (shows a spinner while loading) -->
     <div id="auth-container">
         <div class="spinner"></div>
     </div>
@@ -49,12 +49,12 @@
     <!-- External Libraries -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
-    <!-- Firebase SDKs (using the compatible v8 for simplicity with your setup) -->
+    <!-- Firebase SDKs (using the compatible v8 for simplicity) -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     
-    <!-- Your Application Logic (loaded last) -->
-    <script src="app.js"></script>
+    <!-- Your Application Logic (loaded last for stability) -->
+    <script src="script.js"></script>
 </body>
 </html>
