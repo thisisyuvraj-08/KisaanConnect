@@ -1,5 +1,6 @@
-// Kisaan Connect - Full app.js with real-time chat (farmer/owner), voice language detection, edit/delete/expiration, UI polish
+// Kisaan Connect - Robust, Clean, and Hackathon-Ready
 
+// --- GLOBAL STATE ---
 let currentUser = null;
 let userData = null;
 let map = null;
@@ -15,10 +16,13 @@ let activeChatRoomId = null;
 let activeChatOtherUser = null;
 let postEditId = null;
 
-// DOM
+// --- FIREBASE REFS ---
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// --- DOM ELEMENTS ---
 const $ = s => document.querySelector(s);
 
-// --- AUTH SELECTORS ---
 const authSection = $('#auth-section');
 const loginForm = $('#login-form');
 const registerForm = $('#register-form');
@@ -26,19 +30,15 @@ const toggleAuth = $('#toggle-auth');
 const authTitle = $('#auth-title');
 const authError = $('#auth-error');
 
-// --- MAIN UI ---
 const mainHeader = $('#main-header');
 const userNameSpan = $('#user-name');
 const logoutBtn = $('#logout-btn');
 const appMain = $('#app-main');
 const fab = $('#fab');
-
-// --- DASHBOARD ---
 const dashboardList = $('#dashboard-list');
 const marketplaceTab = $('#marketplace-tab');
 const myPostsTab = $('#my-posts-tab');
 
-// --- POST MODAL ---
 const postModal = $('#post-modal');
 const postModalTitle = $('#post-modal-title');
 const closePostModalBtn = $('#close-post-modal');
@@ -53,7 +53,6 @@ const voiceBtn = $('#voice-btn');
 const voiceStatus = $('#voice-status');
 const postError = $('#post-error');
 
-// --- DETAILS MODAL ---
 const detailsModal = $('#details-modal');
 const closeDetailsModalBtn = $('#close-details-modal');
 const closeDetailsBtn = $('#close-details-btn');
@@ -62,7 +61,6 @@ const detailsInfo = $('#details-info');
 const whatsappBtn = $('#whatsapp-btn');
 const inappChatBtn = $('#inapp-chat-btn');
 
-// --- CHAT ---
 const chatWindow = $('#chat-window');
 const chatUserName = $('#chat-user-name');
 const closeChatWindowBtn = $('#close-chat-window');
@@ -72,9 +70,9 @@ const chatInput = $('#chat-input');
 const chatSendBtn = $('#chat-send-btn');
 const chatVoiceBtn = $('#chat-voice-btn');
 
-// --- LOADER ---
 const loader = $('#loader');
 
+// --- UTILS ---
 function showLoader(show = true) {
   loader.classList.toggle('hidden', !show);
 }
@@ -93,7 +91,7 @@ function formatTimestamp(ts) {
 }
 function formatDateOnly(ts) {
   let d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleDateString('en-CA');
+  return d.toISOString().split('T')[0];
 }
 function haversineDist(lat1, lng1, lat2, lng2) {
   const toRad = d => d * Math.PI / 180;
@@ -113,9 +111,6 @@ function isExpired(expiry) {
 }
 
 // --- AUTH LOGIC ---
-const auth = firebase.auth();
-const db = firebase.firestore();
-
 auth.onAuthStateChanged(async user => {
   if (user) {
     currentUser = user;
@@ -227,8 +222,8 @@ function getLocation() {
       myLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       if (userMarker) map.removeLayer(userMarker);
       userMarker = L.marker([myLocation.lat, myLocation.lng], { title: "You", icon: L.icon({
-        iconUrl: 'https://cdn.jsdelivr.net/npm/leaflet@1.7.1/dist/images/marker-icon-2x-green.png',
-        iconSize: [25, 41], iconAnchor: [12,41]
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png',
+        iconSize: [32, 32], iconAnchor: [16,32]
       })}).addTo(map);
       map.setView([myLocation.lat, myLocation.lng], 13);
       refreshMarketplace();
@@ -387,11 +382,11 @@ function renderMap() {
     if (!item.location) continue;
     let marker = L.marker([item.location.lat, item.location.lng], {
       icon: L.icon({
-        iconUrl: item.type==='produce' 
-          ? 'https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-green.png'
-          : 'https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-yellow.png',
-        iconSize: [25,41],
-        iconAnchor: [12,41]
+        iconUrl: item.type==='produce'
+          ? 'https://cdn-icons-png.flaticon.com/512/684/684908.png'
+          : 'https://cdn-icons-png.flaticon.com/512/684/684831.png',
+        iconSize: [32,32],
+        iconAnchor: [16,32]
       })
     });
     marker.bindTooltip(`${item.itemName} (${item.quantity} ${item.unit})<br>₹${item.price}/${item.priceUnit}`, {direction:'top'});
@@ -519,6 +514,49 @@ function startVoiceInputForPost() {
   recog.onend = () => {
     if (voiceBtn.classList.contains('active')) voiceBtn.classList.remove('active');
   };
+}
+
+// --- SMARTER VOICE EXTRACTION: Hindi + English (pyaz, kilo, rupay, per) ---
+async function getIntentFromVoiceCommand(text) {
+  // Normalize Hindi/English units and prices
+  text = text.toLowerCase();
+  text = text.replace(/kilo ?gram|kilogram|किलोग्राम/g, "kg")
+    .replace(/किलो/g, "kg")
+    .replace(/रुपया|रुपये|rs|rupees|₹/g, "rs")
+    .replace(/per|प्रति/g, "per")
+    .replace(/टुकड़ा|piece|पीस/g, "piece")
+    .replace(/क्विंटल|quintal/g, "quintal");
+  // "{qty} {unit} {item} {price} rs per {unit}"
+  let re = /(\d+)[ ]*(kg|quintal|piece)?[ ]*([^\d]+?)[ ]*(\d+)[ ]*rs[ ]*per[ ]*(kg|quintal|piece)?/;
+  let m = text.match(re);
+  if (m) {
+    return {
+      quantity: m[1],
+      unit: m[2] || 'kg',
+      item: m[3].trim(),
+      price: m[4],
+      priceUnit: m[5] || m[2] || 'kg'
+    };
+  }
+  // "{qty} {unit} {item}" and "{price} rs per {unit}"
+  let mQty = text.match(/(\d+)[ ]*(kg|quintal|piece)?[ ]*([^\d]+)/);
+  let mPrice = text.match(/(\d+)[ ]*rs[ ]*per[ ]*(kg|quintal|piece)?/);
+  let res = { quantity: '', unit: '', item: '', price: '', priceUnit: '' };
+  if (mQty) {
+    res.quantity = mQty[1];
+    res.unit = mQty[2] || 'kg';
+    res.item = mQty[3].trim();
+  }
+  if (mPrice) {
+    res.price = mPrice[1];
+    res.priceUnit = mPrice[2] || res.unit || 'kg';
+  }
+  let m2 = text.match(/(\d+)[ ]*rs[ ]*(kg|quintal|piece)?/);
+  if (!res.price && m2) {
+    res.price = m2[1];
+    res.priceUnit = m2[2] || res.unit || 'kg';
+  }
+  return res;
 }
 
 // --- DETAILS MODAL ---
@@ -672,52 +710,7 @@ chatVoiceBtn.onclick = () => {
     chatVoiceBtn.classList.remove('active');
   };
 };
-function containsHindi(str) {
-  return /[\u0900-\u097F]/.test(str);
-}
 
-// --- SMARTER VOICE EXTRACTION: Hindi + English (pyaz, kilo, rupay, per) ---
-async function getIntentFromVoiceCommand(text) {
-  text = text.toLowerCase();
-  text = text.replace(/kilo ?gram|kilogram|किलोग्राम/g, "kg")
-    .replace(/किलो/g, "kg")
-    .replace(/रुपया|रुपये|rs|rupees|₹/g, "rs")
-    .replace(/per|प्रति/g, "per")
-    .replace(/टुकड़ा|piece|पीस/g, "piece")
-    .replace(/क्विंटल|quintal/g, "quintal");
-
-  let re = /(\d+)[ ]*(kg|quintal|piece)?[ ]*([^\d]+?)[ ]*(\d+)[ ]*rs[ ]*per[ ]*(kg|quintal|piece)?/;
-  let m = text.match(re);
-  if (m) {
-    return {
-      quantity: m[1],
-      unit: m[2] || 'kg',
-      item: m[3].trim(),
-      price: m[4],
-      priceUnit: m[5] || m[2] || 'kg'
-    };
-  }
-  let mQty = text.match(/(\d+)[ ]*(kg|quintal|piece)?[ ]*([^\d]+)/);
-  let mPrice = text.match(/(\d+)[ ]*rs[ ]*per[ ]*(kg|quintal|piece)?/);
-  let res = { quantity: '', unit: '', item: '', price: '', priceUnit: '' };
-  if (mQty) {
-    res.quantity = mQty[1];
-    res.unit = mQty[2] || 'kg';
-    res.item = mQty[3].trim();
-  }
-  if (mPrice) {
-    res.price = mPrice[1];
-    res.priceUnit = mPrice[2] || res.unit || 'kg';
-  }
-  let m2 = text.match(/(\d+)[ ]*rs[ ]*(kg|quintal|piece)?/);
-  if (!res.price && m2) {
-    res.price = m2[1];
-    res.priceUnit = m2[2] || res.unit || 'kg';
-  }
-  return res;
-}
-
-// --- MISC UI ---
 window.onclick = e => {
   if (e.target === postModal) postModal.classList.add('hidden');
   if (e.target === detailsModal) detailsModal.classList.add('hidden');
